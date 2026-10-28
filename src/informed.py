@@ -89,8 +89,17 @@ def dead_end(p: Problem, s: State) -> bool:
             if t > q.tw[1] + 1e-9:
                 return True
             closed = [known[d] for d in q.deps if d in known]
-            if closed and t - p.t(W, q.loc) - p.handling - min(closed) > p.max_dwell + 1e-9:
-                return True                                     # cannot load before the dwell limit
+            if closed:
+                # lower bound on the loading time of q's trip: its products must be ready, and the
+                # trip loads just in time for whichever stop opens it - a pending delivery of the
+                # same day or the first stop of an open delivery trip (not necessarily q itself)
+                day = q.tw[0] // DAY
+                firsts = [o.tw[0] - p.t(W, o.loc) - p.handling for o in (p.requests[x] for x in pending)
+                          if o.kind == DELIVERY and o.tw[0] // DAY == day]
+                firsts += [f.tw[0] - p.t(W, f.loc) - p.handling for f in
+                           (p.requests[v.trip[0]] for v in s.vehicles if v.kind == DELIVERY) if f.tw[0] // DAY == day]
+                if max(ready, min(firsts)) - min(closed) > p.max_dwell + 1e-9:
+                    return True                                 # cannot load before the dwell limit
     return False
 
 
@@ -142,13 +151,10 @@ def _groups(p: Problem, s: State):
         yield g, nodes.get(g, set()), [v.loc for v in vs], len(vs) + int(new_trips)
 
 
-_INCOMPAT: dict[int, set[frozenset]] = {}
-
-
 def _incompatible(p: Problem) -> set[frozenset]:
     """Pairs of requests that can never share a trip: windows, weight, or - for deliveries - the
     earliest moment their products can be at the warehouse (a trip loads only when all are)."""
-    if id(p) not in _INCOMPAT:
+    if "incompatible" not in p.cache:
         cap, bad, W = max(v.capacity for v in p.vehicles), set(), p.depot
         ready = {r: max((p.requests[d].tw[0] + p.service + p.t(p.requests[d].loc, W) + p.handling
                          for d in q.deps), default=0.0) for r, q in p.requests.items()}
@@ -162,8 +168,8 @@ def _incompatible(p: Problem) -> set[frozenset]:
                              or ready[a] + p.handling + p.t(W, qb.loc) > qb.tw[1]))
                     if not (ab or ba) or late or qa.weight + qb.weight > cap:
                         bad.add(frozenset((a, b)))
-        _INCOMPAT[id(p)] = bad
-    return _INCOMPAT[id(p)]
+        p.cache["incompatible"] = bad
+    return p.cache["incompatible"]
 
 
 def _clique(p: Problem, rids: list[str]) -> int:
@@ -314,9 +320,6 @@ class _RelaxedVRP:
                 memo[V] = min((c + memo[V & ~m] for m, c in self.by_low[g].get(low, ()) if m & ~V == 0),
                               default=float("inf"))
         return memo[U]
-
-
-_RELAXED: dict[int, _RelaxedVRP] = {}
 
 
 def h_relaxed(p: Problem, s: State) -> float:
@@ -592,19 +595,16 @@ def _dominates(a: TripOption, b: TripOption) -> bool:
             and a.jit <= b.jit + e)
 
 
-_CATALOG: dict[int, TripCatalog] = {}
-
-
 def _relaxed(p: Problem) -> _RelaxedVRP:
-    if id(p) not in _RELAXED:
-        _RELAXED[id(p)] = _RelaxedVRP(p)
-    return _RELAXED[id(p)]
+    if "relaxed" not in p.cache:
+        p.cache["relaxed"] = _RelaxedVRP(p)
+    return p.cache["relaxed"]
 
 
 def catalog(p: Problem) -> TripCatalog:
-    if id(p) not in _CATALOG:
-        _CATALOG[id(p)] = TripCatalog(p)
-    return _CATALOG[id(p)]
+    if "catalog" not in p.cache:
+        p.cache["catalog"] = TripCatalog(p)
+    return p.cache["catalog"]
 
 
 def trip_successors(p: Problem, s: State):

@@ -76,6 +76,8 @@ class Problem:
     horizon_days: int = 2
     locations: pd.DataFrame | None = None
     data_dir: Path | None = None
+    # per-instance cache of derived structures (incompatible pairs, relaxation, trip catalogue)
+    cache: dict = field(default_factory=dict, repr=False, compare=False)
 
     def __post_init__(self):
         # zero-length self arcs so the hot paths are a single dict lookup

@@ -2,7 +2,7 @@ dataset,inference,var_order,value_order,global_fc,optimize,status,cost_km,assign
 tiny,none,static,static,False,False,feasible,659.27,21,3,22,0,1,0.004,True,True,659.27
 tiny,none,static,static,True,False,feasible,680.5,18,0,1229,52,1,0.028,True,True,680.5
 tiny,none,static,soft,False,False,feasible,659.27,25,7,26,0,1,0.006,True,True,659.27
-tiny,none,static,soft,True,False,feasible,680.5,18,0,1229,52,1,0.03,True,True,680.5
+tiny,none,static,soft,True,False,feasible,680.5,18,0,1229,52,1,0.029,True,True,680.5
 tiny,none,mrv,static,False,False,feasible,659.27,21,3,22,0,1,0.004,True,True,659.27
 tiny,none,mrv,static,True,False,feasible,700.17,18,0,1258,62,1,0.03,True,True,700.17
 tiny,none,mrv,soft,False,False,feasible,659.27,25,7,26,0,1,0.006,True,True,659.27
@@ -15,37 +15,37 @@ tiny,fc,mrv,static,False,False,feasible,659.27,21,3,22,37,1,0.002,True,True,659.
 tiny,fc,mrv,static,True,False,feasible,700.17,18,0,1209,62,1,0.029,True,True,700.17
 tiny,fc,mrv,soft,False,False,feasible,659.27,21,3,22,37,1,0.003,True,True,659.27
 tiny,fc,mrv,soft,True,False,feasible,662.47,18,0,1203,62,1,0.029,True,True,662.47
-tiny,mac,static,static,False,False,feasible,659.27,21,3,22,36,1,0.01,True,True,659.27
+tiny,mac,static,static,False,False,feasible,659.27,21,3,22,36,1,0.011,True,True,659.27
 tiny,mac,static,static,True,False,feasible,680.5,18,0,1118,57,1,0.033,True,True,680.5
 tiny,mac,static,soft,False,False,feasible,659.27,25,7,26,32,1,0.012,True,True,659.27
-tiny,mac,static,soft,True,False,feasible,680.5,18,0,1122,57,1,0.034,True,True,680.5
+tiny,mac,static,soft,True,False,feasible,680.5,18,0,1122,57,1,0.035,True,True,680.5
 tiny,mac,mrv,static,False,False,feasible,659.27,21,3,22,37,1,0.009,True,True,659.27
 tiny,mac,mrv,static,True,False,feasible,700.17,18,0,1199,62,1,0.036,True,True,700.17
 tiny,mac,mrv,soft,False,False,feasible,659.27,21,3,22,37,1,0.01,True,True,659.27
 tiny,mac,mrv,soft,True,False,feasible,662.47,18,0,1176,66,1,0.035,True,True,662.47
-tiny,mac,mrv,soft,True,True,best found (limit),641.24,20000,19987,485578,8617,3,23.552,True,True,641.24
-small,none,static,static,False,False,feasible,846.54,41,4,42,0,1,0.009,True,True,846.54
-small,none,static,static,True,False,feasible,875.14,37,0,4844,124,1,0.161,True,True,875.14
-small,none,static,soft,False,False,limit reached,,20000,19976,20000,0,0,6.737,,,
-small,none,static,soft,True,False,feasible,966.56,42,5,5233,143,1,0.195,True,True,966.56
-small,none,mrv,static,False,False,feasible,846.54,41,4,42,0,1,0.008,True,True,846.54
-small,none,mrv,static,True,False,feasible,901.58,37,0,5256,140,1,0.199,True,True,901.58
-small,none,mrv,soft,False,False,feasible,931.69,57,20,58,0,1,0.02,True,True,931.69
-small,none,mrv,soft,True,False,feasible,860.72,38,1,5372,134,1,0.197,True,True,860.72
+tiny,mac,mrv,soft,True,True,best found (limit),641.24,20000,19987,485578,8617,3,23.6,True,True,641.24
+small,none,static,static,False,False,feasible,846.54,41,4,42,0,1,0.007,True,True,846.54
+small,none,static,static,True,False,feasible,875.14,37,0,4844,124,1,0.15,True,True,875.14
+small,none,static,soft,False,False,limit reached,,20000,19976,20000,0,0,7.272,,,
+small,none,static,soft,True,False,feasible,966.56,42,5,5233,143,1,0.171,True,True,966.56
+small,none,mrv,static,False,False,feasible,846.54,41,4,42,0,1,0.01,True,True,846.54
+small,none,mrv,static,True,False,feasible,901.58,37,0,5256,140,1,0.21,True,True,901.58
+small,none,mrv,soft,False,False,feasible,931.69,57,20,58,0,1,0.019,True,True,931.69
+small,none,mrv,soft,True,False,feasible,860.72,38,1,5372,134,1,0.19,True,True,860.72
 small,fc,static,static,False,False,feasible,846.54,41,4,42,112,1,0.008,True,True,846.54
-small,fc,static,static,True,False,feasible,875.14,37,0,4405,124,1,0.148,True,True,875.14
+small,fc,static,static,True,False,feasible,875.14,37,0,4405,124,1,0.18,True,True,875.14
 small,fc,static,soft,False,False,feasible,931.69,58,21,59,104,1,0.018,True,True,931.69
-small,fc,static,soft,True,False,feasible,966.56,42,5,4588,143,1,0.198,True,True,966.56
-small,fc,mrv,static,False,False,feasible,872.98,42,5,43,119,1,0.01,True,True,872.98
-small,fc,mrv,static,True,False,feasible,901.58,37,0,5053,140,1,0.226,True,True,901.58
-small,fc,mrv,soft,False,False,feasible,825.85,38,1,39,107,1,0.015,True,True,825.85
-small,fc,mrv,soft,True,False,feasible,860.72,38,1,5059,134,1,0.279,True,True,860.72
-small,mac,static,static,False,False,feasible,846.54,41,4,42,114,1,0.072,True,True,846.54
-small,mac,static,static,True,False,feasible,875.14,37,0,4217,126,1,0.208,True,True,875.14
-small,mac,static,soft,False,False,feasible,931.69,57,20,58,112,1,0.084,True,True,931.69
-small,mac,static,soft,True,False,feasible,966.56,41,4,4322,151,1,0.213,True,True,966.56
-small,mac,mrv,static,False,False,feasible,872.98,42,5,43,119,1,0.084,True,True,872.98
-small,mac,mrv,static,True,False,feasible,901.58,37,0,5001,140,1,0.257,True,True,901.58
-small,mac,mrv,soft,False,False,feasible,825.85,37,0,38,108,1,0.084,True,True,825.85
-small,mac,mrv,soft,True,False,feasible,860.72,37,0,5004,135,1,0.264,True,True,860.72
-small,mac,mrv,soft,True,True,best found (limit),840.04,20000,19971,378056,29290,3,34.711,True,True,840.04
+small,fc,static,soft,True,False,feasible,966.56,42,5,4588,143,1,0.222,True,True,966.56
+small,fc,mrv,static,False,False,feasible,872.98,42,5,43,119,1,0.013,True,True,872.98
+small,fc,mrv,static,True,False,feasible,901.58,37,0,5053,140,1,0.183,True,True,901.58
+small,fc,mrv,soft,False,False,feasible,825.85,38,1,39,107,1,0.016,True,True,825.85
+small,fc,mrv,soft,True,False,feasible,860.72,38,1,5059,134,1,0.201,True,True,860.72
+small,mac,static,static,False,False,feasible,846.54,41,4,42,114,1,0.065,True,True,846.54
+small,mac,static,static,True,False,feasible,875.14,37,0,4217,126,1,0.197,True,True,875.14
+small,mac,static,soft,False,False,feasible,931.69,57,20,58,112,1,0.073,True,True,931.69
+small,mac,static,soft,True,False,feasible,966.56,41,4,4322,151,1,0.224,True,True,966.56
+small,mac,mrv,static,False,False,feasible,872.98,42,5,43,119,1,0.074,True,True,872.98
+small,mac,mrv,static,True,False,feasible,901.58,37,0,5001,140,1,0.245,True,True,901.58
+small,mac,mrv,soft,False,False,feasible,825.85,37,0,38,108,1,0.087,True,True,825.85
+small,mac,mrv,soft,True,False,feasible,860.72,37,0,5004,135,1,0.249,True,True,860.72
+small,mac,mrv,soft,True,True,best found (limit),840.04,20000,19971,378056,29290,3,31.639,True,True,840.04
