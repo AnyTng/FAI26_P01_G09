@@ -1,0 +1,139 @@
+check,status,detail,dataset
+collection_centers: no missing values,ok,0 empty cells,tiny
+collection_centers: no duplicated rows,ok,,tiny
+collection_centers: unique key,ok,,tiny
+customers: no missing values,ok,0 empty cells,tiny
+customers: no duplicated rows,ok,,tiny
+customers: unique key,ok,,tiny
+delivery_locations: no missing values,ok,0 empty cells,tiny
+delivery_locations: no duplicated rows,ok,,tiny
+delivery_locations: unique key,ok,,tiny
+distance_matrix: no missing values,ok,0 empty cells,tiny
+distance_matrix: no duplicated rows,ok,,tiny
+localities: no missing values,ok,0 empty cells,tiny
+localities: no duplicated rows,ok,,tiny
+localities: unique key,ok,,tiny
+locations: no missing values,ok,0 empty cells,tiny
+locations: no duplicated rows,ok,,tiny
+locations: unique key,ok,,tiny
+order_items: no missing values,ok,0 empty cells,tiny
+order_items: no duplicated rows,ok,,tiny
+order_items: unique key,ok,,tiny
+orders: no missing values,ok,0 empty cells,tiny
+orders: no duplicated rows,ok,,tiny
+orders: unique key,ok,,tiny
+producers: no missing values,ok,0 empty cells,tiny
+producers: no duplicated rows,ok,,tiny
+producers: unique key,ok,,tiny
+products: no missing values,ok,0 empty cells,tiny
+products: no duplicated rows,ok,,tiny
+products: unique key,ok,,tiny
+rules: no missing values,ok,0 empty cells,tiny
+rules: no duplicated rows,ok,,tiny
+rules: unique key,ok,,tiny
+vehicles: no missing values,ok,0 empty cells,tiny
+vehicles: no duplicated rows,ok,,tiny
+vehicles: unique key,ok,,tiny
+FK producers.locality_id -> localities.locality_id,ok,[],tiny
+FK customers.locality_id -> localities.locality_id,ok,[],tiny
+FK delivery_locations.locality_id -> localities.locality_id,ok,[],tiny
+FK collection_centers.locality_id -> localities.locality_id,ok,[],tiny
+FK products.producer_id -> producers.producer_id,ok,[],tiny
+FK vehicles.center_id -> collection_centers.center_id,ok,[],tiny
+FK orders.customer_id -> customers.customer_id,ok,[],tiny
+FK orders.delivery_location_id -> delivery_locations.delivery_location_id,ok,[],tiny
+FK order_items.order_id -> orders.order_id,ok,[],tiny
+FK order_items.product_id -> products.product_id,ok,[],tiny
+"locations: unique (type, ref)",ok,,tiny
+locations: covers every producer,ok,,tiny
+locations: covers every delivery_location,ok,,tiny
+locations: covers every collection_center,ok,,tiny
+locations: valid coordinates,ok,,tiny
+localities: valid coordinates,ok,,tiny
+availability_start <= availability_end,ok,,tiny
+delivery_start <= delivery_end,ok,,tiny
+availability opens before the delivery deadline,ok,,tiny
+order_items.quantity > 0,ok,,tiny
+order_items.weight_kg > 0,ok,,tiny
+products.unit_weight_kg > 0,ok,,tiny
+vehicles.capacity_kg > 0,ok,,tiny
+collection_centers.capacity_kg > 0,ok,,tiny
+weight_kg = quantity x unit_weight_kg,ok,max deviation 0 kg,tiny
+every line fits in some vehicle,ok,necessary condition only,tiny
+warehouse capacity >= total demand,ok,270.0 kg,tiny
+matrix: unique pairs,ok,,tiny
+matrix: every ordered pair present,ok,0 missing,tiny
+matrix: non-negative,ok,,tiny
+matrix: types match locations,ok,,tiny
+matrix: symmetric,ok,,tiny
+matrix: pairs at distance 0 (same coordinates),info,2,tiny
+lines ordered after their pickup window opens,info,0,tiny
+collection_centers: no missing values,ok,0 empty cells,small
+collection_centers: no duplicated rows,ok,,small
+collection_centers: unique key,ok,,small
+customers: no missing values,ok,0 empty cells,small
+customers: no duplicated rows,ok,,small
+customers: unique key,ok,,small
+delivery_locations: no missing values,ok,0 empty cells,small
+delivery_locations: no duplicated rows,ok,,small
+delivery_locations: unique key,ok,,small
+distance_matrix: no missing values,ok,0 empty cells,small
+distance_matrix: no duplicated rows,ok,,small
+localities: no missing values,ok,0 empty cells,small
+localities: no duplicated rows,ok,,small
+localities: unique key,ok,,small
+locations: no missing values,ok,0 empty cells,small
+locations: no duplicated rows,ok,,small
+locations: unique key,ok,,small
+order_items: no missing values,ok,0 empty cells,small
+order_items: no duplicated rows,ok,,small
+order_items: unique key,ok,,small
+orders: no missing values,ok,0 empty cells,small
+orders: no duplicated rows,ok,,small
+orders: unique key,ok,,small
+producers: no missing values,ok,0 empty cells,small
+producers: no duplicated rows,ok,,small
+producers: unique key,ok,,small
+products: no missing values,ok,0 empty cells,small
+products: no duplicated rows,ok,,small
+products: unique key,ok,,small
+rules: no missing values,ok,0 empty cells,small
+rules: no duplicated rows,ok,,small
+rules: unique key,ok,,small
+vehicles: no missing values,ok,0 empty cells,small
+vehicles: no duplicated rows,ok,,small
+vehicles: unique key,ok,,small
+FK producers.locality_id -> localities.locality_id,ok,[],small
+FK customers.locality_id -> localities.locality_id,ok,[],small
+FK delivery_locations.locality_id -> localities.locality_id,ok,[],small
+FK collection_centers.locality_id -> localities.locality_id,ok,[],small
+FK products.producer_id -> producers.producer_id,ok,[],small
+FK vehicles.center_id -> collection_centers.center_id,ok,[],small
+FK orders.customer_id -> customers.customer_id,ok,[],small
+FK orders.delivery_location_id -> delivery_locations.delivery_location_id,ok,[],small
+FK order_items.order_id -> orders.order_id,ok,[],small
+FK order_items.product_id -> products.product_id,ok,[],small
+"locations: unique (type, ref)",ok,,small
+locations: covers every producer,ok,,small
+locations: covers every delivery_location,ok,,small
+locations: covers every collection_center,ok,,small
+locations: valid coordinates,ok,,small
+localities: valid coordinates,ok,,small
+availability_start <= availability_end,ok,,small
+delivery_start <= delivery_end,ok,,small
+availability opens before the delivery deadline,ok,,small
+order_items.quantity > 0,ok,,small
+order_items.weight_kg > 0,ok,,small
+products.unit_weight_kg > 0,ok,,small
+vehicles.capacity_kg > 0,ok,,small
+collection_centers.capacity_kg > 0,ok,,small
+weight_kg = quantity x unit_weight_kg,ok,max deviation 8.88178e-16 kg,small
+every line fits in some vehicle,ok,necessary condition only,small
+warehouse capacity >= total demand,ok,580.0 kg,small
+matrix: unique pairs,ok,,small
+matrix: every ordered pair present,ok,0 missing,small
+matrix: non-negative,ok,,small
+matrix: types match locations,ok,,small
+matrix: symmetric,ok,,small
+matrix: pairs at distance 0 (same coordinates),info,4,small
+lines ordered after their pickup window opens,info,0,small
