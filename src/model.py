@@ -1,20 +1,20 @@
-"""Problem model for the local-food pickup-and-delivery routing agent.
+"""Modelo do problema para o agente de recolha e entrega de alimentos locais.
 
-Flow imposed by the dataset rules: producer -> collection center (warehouse) -> delivery location.
+Fluxo imposto pelas regras do dataset: produtor -> centro de recolha (armazém) -> local de entrega.
 
-Modelling choices (documented in the main notebook):
-  * Time is measured in minutes since ``start_date 00:00``.
-  * A *pickup request* groups order items of the same producer whose availability
-    windows intersect (interval stabbing), so one stop collects all of them.
-  * A *delivery request* is one customer order (one delivery location, one window).
-  * A vehicle route is a list of *trips*; every trip starts and ends at the warehouse
-    and is homogeneous: only pickups or only deliveries.
-  * Windows constrain the START of service (``window_semantics = service_start``).
-  * A product cannot be collected before its order was placed (``order_datetime``).
-  * Vehicles are back at the warehouse every night: a trip cannot cross midnight.
+Decisões de modelação (explicadas no notebook principal):
+  * O tempo conta-se em minutos desde ``start_date 00:00``.
+  * Um *pedido de recolha* junta as linhas do mesmo produtor cujas janelas de disponibilidade
+    se intersetam (interval stabbing), para que uma só paragem as recolha todas.
+  * Um *pedido de entrega* é uma encomenda (um local de entrega, uma janela).
+  * A rota de um veículo é uma lista de *viagens*; cada viagem começa e acaba no armazém e é
+    homogénea: só recolhas ou só entregas.
+  * As janelas limitam o INÍCIO do serviço (``window_semantics = service_start``).
+  * Um produto não pode ser recolhido antes de a encomenda ser feita (``order_datetime``).
+  * Os veículos estão de volta ao armazém todas as noites: nenhuma viagem passa a meia-noite.
 
-Sections: entities · loading · solution & schedule (cost function, feasibility checker) ·
-search state · data audit and independent item-level checker · figures.
+Secções: entidades · carregamento · solução e horário (função de custo, verificação de
+viabilidade) · estado da pesquisa · auditoria dos dados e verificador linha a linha · figuras.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ PICKUP, DELIVERY = "P", "D"
 DAY = 24 * 60
 
 
-# --------------------------------------------------------------------------- entities
+# --------------------------------------------------------------------------- entidades
 @dataclass(frozen=True)
 class Item:
     item_id: int
@@ -36,20 +36,20 @@ class Item:
     product_id: int
     producer_id: int
     weight: float
-    avail: tuple[float, float]      # availability window at the producer (min)
-    deliv: tuple[float, float]      # delivery window at the delivery location (min)
+    avail: tuple[float, float]      # janela de disponibilidade no produtor (min)
+    deliv: tuple[float, float]      # janela de entrega no local de entrega (min)
 
 
 @dataclass(frozen=True)
 class Request:
-    """A stop the agent has to schedule (pickup at a producer or delivery of an order)."""
-    rid: str                        # "P<n>" or "D<order_id>"
+    """Uma paragem que o agente tem de agendar (recolha num produtor ou entrega de uma encomenda)."""
+    rid: str                        # "P<n>" ou "D<order_id>"
     kind: str                       # PICKUP | DELIVERY
-    loc: int                        # location_id in the distance matrix
-    tw: tuple[float, float]         # window for the service start (min)
+    loc: int                        # location_id na matriz de distâncias
+    tw: tuple[float, float]         # janela para o início do serviço (min)
     weight: float
     items: tuple[int, ...]
-    deps: tuple[str, ...] = ()      # delivery: pickup requests that must reach the warehouse first
+    deps: tuple[str, ...] = ()      # entrega: recolhas que têm de chegar primeiro ao armazém
 
 
 @dataclass(frozen=True)
@@ -63,24 +63,24 @@ class Vehicle:
 @dataclass
 class Problem:
     name: str
-    depot: int                                   # location_id of the collection center
+    depot: int                                   # location_id do centro de recolha
     vehicles: list[Vehicle]
     requests: dict[str, Request]
     items: dict[int, Item]
     dist: dict[tuple[int, int], float]           # km
     time: dict[tuple[int, int], float]           # min
     service: float = 10.0                        # stop_service_min
-    handling: float = 15.0                       # warehouse_handling_min (load or unload)
-    max_dwell: float = 24 * 60                   # max_warehouse_dwell_h, in minutes
+    handling: float = 15.0                       # warehouse_handling_min (carregar ou descarregar)
+    max_dwell: float = 24 * 60                   # max_warehouse_dwell_h, em minutos
     start_date: pd.Timestamp = field(default_factory=lambda: pd.Timestamp("2026-10-30"))
     horizon_days: int = 2
     locations: pd.DataFrame | None = None
     data_dir: Path | None = None
-    # per-instance cache of derived structures (incompatible pairs, relaxation, trip catalogue)
+    # cache por instância das estruturas derivadas (pares incompatíveis, relaxação, catálogo de viagens)
     cache: dict = field(default_factory=dict, repr=False, compare=False)
 
     def __post_init__(self):
-        # zero-length self arcs so the hot paths are a single dict lookup
+        # arcos de um local para si próprio com custo 0, para que os caminhos críticos sejam uma só consulta ao dicionário
         ids = {a for a, _ in self.dist} | {b for _, b in self.dist}
         for a in ids:
             self.dist[a, a] = self.time[a, a] = 0.0
@@ -101,21 +101,21 @@ class Problem:
         return [r for r, q in self.requests.items() if q.kind == DELIVERY]
 
     def vehicle(self, vid: int) -> Vehicle:
-        if vid not in self._vehicles:                    # fleet edited after construction
+        if vid not in self._vehicles:                    # frota alterada depois da construção
             self._vehicles = {v.vid: v for v in self.vehicles}
         return self._vehicles[vid]
 
     def clock(self, minutes: float) -> str:
-        """Minutes since start -> 'dd HH:MM' (for printing)."""
+        """Minutos desde o início -> 'dd HH:MM' (para mostrar)."""
         ts = self.start_date + pd.Timedelta(minutes=minutes)
         return ts.strftime("%d %H:%M")
 
 
-# --------------------------------------------------------------------------- loading
+# --------------------------------------------------------------------------- carregamento
 def _group_pickups(items: list[Item], max_weight: float) -> list[list[Item]]:
-    """Greedy interval stabbing: sort by window end and keep adding items while the
-    windows still intersect and the weight fits. Gives the minimum number of groups
-    when weight is not binding."""
+    """Interval stabbing guloso: ordena pelo fim da janela e vai juntando linhas enquanto as
+    janelas ainda se intersetam e o peso cabe. Dá o número mínimo de grupos quando o peso não
+    é limitativo."""
     groups: list[list[Item]] = []
     for it in sorted(items, key=lambda i: (i.avail[1], i.avail[0])):
         for g in groups:
@@ -130,10 +130,10 @@ def _group_pickups(items: list[Item], max_weight: float) -> list[list[Item]]:
 
 
 def load_problem(data_dir: str | Path, grouping: str = "interval") -> Problem:
-    """Read the CSVs of one dataset and build a :class:`Problem`.
+    """Lê os CSV de um dataset e constrói um :class:`Problem`.
 
-    grouping = "interval" -> pickups grouped per producer by intersecting windows;
-    grouping = "order"    -> one pickup per (order, producer) pair (finer, more stops).
+    grouping = "interval" -> recolhas agrupadas por produtor, pelas janelas que se intersetam;
+    grouping = "order"    -> uma recolha por par (encomenda, produtor) (mais fino, mais paragens).
     """
     data_dir = Path(data_dir)
     rd = lambda f: pd.read_csv(data_dir / f"{f}.csv")
@@ -155,7 +155,7 @@ def load_problem(data_dir: str | Path, grouping: str = "interval") -> Problem:
     oi = rd("order_items")
     for c in ("availability_start", "availability_end", "delivery_start", "delivery_end"):
         oi[c] = mins(oi[c])
-    # an item cannot be collected before the customer placed the order
+    # uma linha não pode ser recolhida antes de o cliente fazer a encomenda
     ordered = mins(oi.order_id.map(orders.order_datetime))
     oi["availability_start"] = oi[["availability_start"]].assign(o=ordered).max(axis=1)
     items = {
@@ -165,7 +165,7 @@ def load_problem(data_dir: str | Path, grouping: str = "interval") -> Problem:
         for r in oi.itertuples()
     }
 
-    # pickup requests
+    # pedidos de recolha
     max_w = min(v.capacity for v in vehicles)
     by_key: dict[tuple, list[Item]] = {}
     for it in items.values():
@@ -184,7 +184,7 @@ def load_problem(data_dir: str | Path, grouping: str = "interval") -> Problem:
             for i in g:
                 item_pickup[i.item_id] = rid
 
-    # delivery requests (one per order)
+    # pedidos de entrega (um por encomenda)
     for oid, row in orders.sort_index().iterrows():
         its = [i for i in items.values() if i.order_id == oid]
         tw = (max(i.deliv[0] for i in its), min(i.deliv[1] for i in its))
@@ -204,34 +204,34 @@ def load_problem(data_dir: str | Path, grouping: str = "interval") -> Problem:
                    horizon_days=int(rules["horizon_days"]), locations=locs, data_dir=data_dir)
 
 
-# --------------------------------------------------------------------------- solution & schedule
-Trip = list[str]                       # sequence of request ids (warehouse implicit at both ends)
-Solution = dict[int, list[Trip]]       # vehicle id -> ordered list of trips
+# --------------------------------------------------------------------------- solução e horário
+Trip = list[str]                       # sequência de ids de pedidos (o armazém está implícito nas duas pontas)
+Solution = dict[int, list[Trip]]       # id do veículo -> lista ordenada de viagens
 
 
 @dataclass
 class TripSchedule:
     vid: int
     kind: str
-    stops: list[tuple[str, float, float]]   # (rid, arrival, service start)
-    load_start: float                       # delivery trips: start of loading at the warehouse
+    stops: list[tuple[str, float, float]]   # (rid, chegada, início do serviço)
+    load_start: float                       # viagens de entrega: início da carga no armazém
     depart: float
-    back: float                             # arrival at the warehouse
-    end: float                              # vehicle free again (after unloading if pickup trip)
+    back: float                             # chegada ao armazém
+    end: float                              # veículo livre outra vez (depois de descarregar, nas viagens de recolha)
     km: float
-    load: float                             # max load carried during the trip
-    late: float = 0.0                       # minutes of window violation
-    over: float = 0.0                       # kg above capacity
-    dwell: float = 0.0                      # minutes above the max warehouse dwell
+    load: float                             # carga máxima transportada na viagem
+    late: float = 0.0                       # minutos fora da janela
+    over: float = 0.0                       # kg acima da capacidade
+    dwell: float = 0.0                      # minutos acima da permanência máxima no armazém
     mixed: bool = False
-    overnight: bool = False                 # trip does not return on the day it left
+    overnight: bool = False                 # a viagem não volta no dia em que saiu
 
 
 def simulate_trip(p: Problem, vid: int, trip: Trip, free: float, arrival_w: dict[str, float]) -> TripSchedule:
-    """Schedule one trip that leaves the warehouse when the vehicle is free at ``free``.
+    """Calcula o horário de uma viagem que sai do armazém quando o veículo fica livre, em ``free``.
 
-    ``arrival_w[pickup_rid]`` is when that pickup reached the warehouse; it is needed for
-    delivery trips (precedence + dwell). Missing dependencies must be handled by the caller.
+    ``arrival_w[pickup_rid]`` é a hora a que essa recolha chegou ao armazém; é precisa nas
+    viagens de entrega (precedência + permanência). Quem chama trata das dependências em falta.
     """
     reqs = [p.requests[r] for r in trip]
     kinds = {q.kind for q in reqs}
@@ -241,16 +241,16 @@ def simulate_trip(p: Problem, vid: int, trip: Trip, free: float, arrival_w: dict
 
     if kind == DELIVERY:
         load = sum(q.weight for q in reqs)
-        deps = sorted({d for q in reqs for d in q.deps})      # fixed order for the float sums
+        deps = sorted({d for q in reqs for d in q.deps})      # ordem fixa para as somas em vírgula flutuante
         ready = max((arrival_w[d] + p.handling for d in deps), default=free)
-        # earliest moment everything is ready, but no earlier than needed to reach the first window
+        # primeiro momento em que está tudo pronto, mas não antes do necessário para chegar à primeira janela
         load_start = max(free, ready, reqs[0].tw[0] - p.t(p.depot, reqs[0].loc) - p.handling)
         dwell = sum(max(0.0, load_start - arrival_w[d] - p.max_dwell) for d in deps)
         depart = load_start + p.handling
     else:
         load = 0.0
         first = reqs[0]
-        # just-in-time: arrive at the first producer when its window opens (shorter dwell, no idle wait)
+        # just in time: chega ao primeiro produtor quando a janela abre (menos permanência, sem esperas)
         depart = load_start = max(free, first.tw[0] - p.t(p.depot, first.loc))
 
     t, loc, km, peak, stops = depart, p.depot, 0.0, load, []
@@ -267,7 +267,7 @@ def simulate_trip(p: Problem, vid: int, trip: Trip, free: float, arrival_w: dict
     back = t + p.t(loc, p.depot)
     over = max(0.0, peak - cap)
     end = back + p.handling if kind == PICKUP else back
-    overnight = back // DAY != load_start // DAY        # vehicles are back at the warehouse every night
+    overnight = back // DAY != load_start // DAY        # os veículos voltam ao armazém todas as noites
     return TripSchedule(vid, kind, stops, load_start, depart, back, end, km, peak, late, over, dwell,
                         len(kinds) > 0, overnight)
 
@@ -290,7 +290,7 @@ class Evaluation:
 
     @property
     def penalized(self) -> float:
-        """Cost used by local search: km plus heavy penalties for every violated constraint."""
+        """Custo usado pela pesquisa local: km mais penalizações pesadas por cada restrição violada."""
         return (self.km + 100 * self.late + 100 * self.over + 100 * self.dwell
                 + 10_000 * (self.unserved + self.duplicated + self.deadlock + self.mixed + self.overnight))
 
@@ -302,11 +302,12 @@ class Evaluation:
 
 
 def evaluate(p: Problem, sol: Solution) -> Evaluation:
-    """Cost function + route feasibility checker for a complete solution.
+    """Função de custo + verificação de viabilidade de uma solução completa.
 
-    Trips of different vehicles interact through the warehouse: a delivery trip can only
-    start loading once all its pickups were unloaded. Trips are therefore simulated in a
-    dependency-driven order; if no vehicle can advance, the solution is deadlocked.
+    As viagens de veículos diferentes interagem através do armazém: uma viagem de entrega só
+    pode começar a carregar depois de descarregadas todas as suas recolhas. Por isso as viagens
+    são simuladas pela ordem das dependências; se nenhum veículo puder avançar, a solução fica
+    bloqueada.
     """
     seen: dict[str, int] = {}
     for trips in sol.values():
@@ -329,7 +330,7 @@ def evaluate(p: Problem, sol: Solution) -> Evaluation:
                 trip = trips[nxt[vid]]
                 deps = {d for r in trip for d in p.requests[r].deps}
                 if not deps <= arrival_w.keys():
-                    break                                   # waits for another vehicle
+                    break                                   # espera por outro veículo
                 ts = simulate_trip(p, vid, trip, free[vid], arrival_w)
                 if ts.kind == PICKUP:
                     for rid, _, _ in ts.stops:
@@ -338,7 +339,7 @@ def evaluate(p: Problem, sol: Solution) -> Evaluation:
                 trips_done.append(ts)
                 nxt[vid] += 1
                 progress = True
-    # requests that could not be scheduled because of circular waits between vehicles
+    # pedidos que não puderam ser agendados por esperas circulares entre veículos
     deadlock = sum(len(trip) for v, t in queue.items() for trip in t[nxt[v]:])
 
     ev = Evaluation(km=sum(t.km for t in trips_done), feasible=False, trips=trips_done,
@@ -353,27 +354,27 @@ def evaluate(p: Problem, sol: Solution) -> Evaluation:
     return ev
 
 
-# --------------------------------------------------------------------------- search state
+# --------------------------------------------------------------------------- estado da pesquisa
 @dataclass(frozen=True)
 class VState:
-    """Situation of one vehicle inside a partial solution."""
+    """Situação de um veículo numa solução parcial."""
     vid: int
-    loc: int                        # current location
-    time: float                     # idle: free since; on a trip: end of service at the last stop
-    kind: str | None = None         # None = idle at the warehouse; else kind of the open trip
-    trip: tuple[str, ...] = ()      # open trip (requests visited so far)
-    trip_free: float = 0.0          # when the vehicle became free for the open trip
-    trip_km: float = 0.0            # km of the open trip so far (return leg excluded)
-    done: tuple[tuple[str, ...], ...] = ()   # closed trips
+    loc: int                        # local atual
+    time: float                     # parado: livre desde; em viagem: fim do serviço na última paragem
+    kind: str | None = None         # None = parado no armazém; senão, tipo da viagem em curso
+    trip: tuple[str, ...] = ()      # viagem em curso (pedidos já visitados)
+    trip_free: float = 0.0          # hora a que o veículo ficou livre para a viagem em curso
+    trip_km: float = 0.0            # km da viagem em curso até agora (sem o regresso)
+    done: tuple[tuple[str, ...], ...] = ()   # viagens fechadas
 
 
 @dataclass(frozen=True)
 class State:
-    """Node of the informed search: a partial solution built trip by trip."""
+    """Nó da pesquisa informada: uma solução parcial construída viagem a viagem."""
     vehicles: tuple[VState, ...]
     served: frozenset[str]
-    arrival_w: tuple[tuple[str, float], ...]   # pickup -> arrival time at the warehouse
-    g: float                                   # km travelled so far
+    arrival_w: tuple[tuple[str, float], ...]   # recolha -> hora de chegada ao armazém
+    g: float                                   # km percorridos até agora
 
     @staticmethod
     def initial(p: Problem) -> "State":
@@ -386,24 +387,24 @@ class State:
         return {v.vid: [list(t) for t in v.done] + ([list(v.trip)] if v.trip else []) for v in self.vehicles}
 
     def key(self) -> tuple:
-        """Identity used for duplicate/dominance detection (order matters only in delivery trips,
-        where adding a stop can shift the departure of the whole trip)."""
+        """Identidade usada para detetar duplicados e dominância (a ordem só conta nas viagens de
+        entrega, onde acrescentar uma paragem pode mudar a partida da viagem toda)."""
         return (self.served, tuple(r for r, _ in self.arrival_w),
                 tuple((v.loc, v.kind, tuple(v.trip) if v.kind == DELIVERY else frozenset(v.trip))
                       for v in self.vehicles))
 
     def times(self) -> tuple[float, ...]:
-        """Clocks compared for dominance: vehicles free earlier and pickups at the warehouse
-        earlier. (Earlier arrivals can only hurt through the dwell limit; see informed.py.)"""
+        """Relógios comparados na dominância: veículos livres mais cedo e recolhas no armazém mais
+        cedo. (Chegar mais cedo só pode prejudicar através do limite de permanência; ver informed.py.)"""
         return (tuple(v.time for v in self.vehicles) + tuple(v.trip_free for v in self.vehicles)
                 + tuple(t for _, t in self.arrival_w))
 
 
 def schedule_table(p: Problem, ev: Evaluation) -> pd.DataFrame:
-    """Flat table with every stop of every trip (for display in notebooks)."""
+    """Tabela com todas as paragens de todas as viagens (para mostrar nos notebooks)."""
     rows = []
     for k, ts in enumerate(sorted(ev.trips, key=lambda t: (t.vid, t.depart))):
-        rows.append(dict(vehicle=ts.vid, trip=k, stop="W(load)" if ts.kind == DELIVERY else "W", kind=ts.kind,
+        rows.append(dict(vehicle=ts.vid, trip=k, stop="W(carga)" if ts.kind == DELIVERY else "W", kind=ts.kind,
                          arrival=None, start=p.clock(ts.depart), window="", weight=None))
         for rid, arr, start in ts.stops:
             q = p.requests[rid]
@@ -414,11 +415,11 @@ def schedule_table(p: Problem, ev: Evaluation) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-# =========================================================================== data audit & item checker
-# The item-level checker does NOT use the aggregated requests: it rebuilds every order line
-# straight from the CSV files and replays the explicit stop list of a solution (pickup, unload,
-# load, delivery, return), so it catches mistakes in the grouping, in the simulator or in the
-# search code alike. Ported (and adapted to this code base) from the group's earlier prototype.
+# =========================================================================== auditoria e verificador por linha
+# O verificador por linha NÃO usa os pedidos agregados: reconstrói cada linha de encomenda
+# diretamente a partir dos CSV e repete a lista explícita de paragens de uma solução (recolha,
+# descarga, carga, entrega, regresso). Assim apanha erros no agrupamento, no simulador ou no
+# código de pesquisa. Vem do protótipo anterior do grupo, adaptado a este código.
 TABLES = ["collection_centers", "customers", "delivery_locations", "distance_matrix", "localities",
           "locations", "order_items", "orders", "producers", "products", "rules", "vehicles"]
 KEYS = {"collection_centers": "center_id", "customers": "customer_id", "delivery_locations": "delivery_location_id",
@@ -441,80 +442,80 @@ def read_tables(data_dir: str | Path) -> dict[str, pd.DataFrame]:
     return {n: pd.read_csv(Path(data_dir) / f"{n}.csv") for n in TABLES}
 
 
-# --------------------------------------------------------------------------- audit
+# --------------------------------------------------------------------------- auditoria
 def audit(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Integrity checks on the raw tables. Returns one row per check (ok / warning / error / info)."""
+    """Verificações de integridade das tabelas originais. Devolve uma linha por verificação (ok / warning / error / info)."""
     rows = []
 
     def check(name, ok, detail="", severity="error"):
         rows.append(dict(check=name, status="ok" if bool(ok) else severity, detail=str(detail)))
 
     for name, df in tables.items():
-        check(f"{name}: no missing values", not df.isna().any().any(), f"{int(df.isna().sum().sum())} empty cells")
-        check(f"{name}: no duplicated rows", not df.duplicated().any())
+        check(f"{name}: sem valores em falta", not df.isna().any().any(), f"{int(df.isna().sum().sum())} células vazias")
+        check(f"{name}: sem linhas duplicadas", not df.duplicated().any())
         if name in KEYS:
-            check(f"{name}: unique key", df[KEYS[name]].is_unique)
+            check(f"{name}: chave única", df[KEYS[name]].is_unique)
     for a, col, b, ref in RELATIONS:
         missing = set(tables[a][col]) - set(tables[b][ref])
         check(f"FK {a}.{col} -> {b}.{ref}", not missing, sorted(missing))
 
     loc = tables["locations"]
-    check("locations: unique (type, ref)", not loc.duplicated(["location_type", "ref_id"]).any())
+    check("locations: (tipo, ref) único", not loc.duplicated(["location_type", "ref_id"]).any())
     for kind, table, key in [("producer", "producers", "producer_id"),
                              ("delivery_location", "delivery_locations", "delivery_location_id"),
                              ("collection_center", "collection_centers", "center_id")]:
         refs = set(loc.loc[loc.location_type == kind, "ref_id"])
-        check(f"locations: covers every {kind}", refs == set(tables[table][key]))
+        check(f"locations: cobre todos os {kind}", refs == set(tables[table][key]))
     for t in ("locations", "localities"):
         d = tables[t]
-        check(f"{t}: valid coordinates", d.latitude.between(-90, 90).all() and d.longitude.between(-180, 180).all())
+        check(f"{t}: coordenadas válidas", d.latitude.between(-90, 90).all() and d.longitude.between(-180, 180).all())
 
     items = tables["order_items"]
     for a, b in [("availability_start", "availability_end"), ("delivery_start", "delivery_end")]:
         x, y = pd.to_datetime(items[a], errors="coerce"), pd.to_datetime(items[b], errors="coerce")
         check(f"{a} <= {b}", (x.notna() & y.notna() & (x <= y)).all())
     av, de = pd.to_datetime(items.availability_start), pd.to_datetime(items.delivery_end)
-    check("availability opens before the delivery deadline", (av <= de).all())
+    check("disponibilidade abre antes do fim da entrega", (av <= de).all())
     for t, col in [("order_items", "quantity"), ("order_items", "weight_kg"), ("products", "unit_weight_kg"),
                    ("vehicles", "capacity_kg"), ("collection_centers", "capacity_kg")]:
         check(f"{t}.{col} > 0", (tables[t][col] > 0).all())
     merged = items.merge(tables["products"], on="product_id", validate="many_to_one")
     delta = (merged.weight_kg - merged.quantity * merged.unit_weight_kg).abs()
-    check("weight_kg = quantity x unit_weight_kg", (delta < 1e-6).all(), f"max deviation {delta.max():.6g} kg")
-    check("every line fits in some vehicle", (items.weight_kg <= tables["vehicles"].capacity_kg.max()).all(),
-          "necessary condition only", severity="warning")
+    check("weight_kg = quantity x unit_weight_kg", (delta < 1e-6).all(), f"desvio máximo {delta.max():.6g} kg")
+    check("cada linha cabe em algum veículo", (items.weight_kg <= tables["vehicles"].capacity_kg.max()).all(),
+          "só condição necessária", severity="warning")
     total = items.weight_kg.sum()
-    check("warehouse capacity >= total demand", total <= tables["collection_centers"].capacity_kg.sum(),
+    check("capacidade do armazém >= procura total", total <= tables["collection_centers"].capacity_kg.sum(),
           f"{total:.1f} kg", severity="warning")
 
     m = tables["distance_matrix"]
     ids = set(loc.location_id)
     pairs = set(zip(m.origin_location_id, m.destination_location_id))
     expected = {(a, b) for a in ids for b in ids if a != b}
-    check("matrix: unique pairs", not m.duplicated(["origin_location_id", "destination_location_id"]).any())
-    check("matrix: every ordered pair present", expected <= pairs, f"{len(expected - pairs)} missing")
-    check("matrix: non-negative", (m[["distance_km", "duration_min"]] >= 0).all().all())
+    check("matriz: pares únicos", not m.duplicated(["origin_location_id", "destination_location_id"]).any())
+    check("matriz: todos os pares ordenados presentes", expected <= pairs, f"{len(expected - pairs)} em falta")
+    check("matriz: sem valores negativos", (m[["distance_km", "duration_min"]] >= 0).all().all())
     types = loc.set_index("location_id").location_type
-    check("matrix: types match locations", m.origin_location_id.map(types).eq(m.origin_type).all()
+    check("matriz: tipos coincidem com locations", m.origin_location_id.map(types).eq(m.origin_type).all()
           and m.destination_location_id.map(types).eq(m.destination_type).all())
     cost = {(r.origin_location_id, r.destination_location_id): (r.distance_km, r.duration_min) for r in m.itertuples()}
-    check("matrix: symmetric", all(cost.get((b, a)) == v for (a, b), v in cost.items()), severity="warning")
+    check("matriz: simétrica", all(cost.get((b, a)) == v for (a, b), v in cost.items()), severity="warning")
     zero = m[(m.distance_km == 0)]
-    rows.append(dict(check="matrix: pairs at distance 0 (same coordinates)", status="info", detail=str(len(zero))))
+    rows.append(dict(check="matriz: pares à distância 0 (mesmas coordenadas)", status="info", detail=str(len(zero))))
     j = items.merge(tables["orders"][["order_id", "order_datetime"]], on="order_id")
     n = int((pd.to_datetime(j.order_datetime) > pd.to_datetime(j.availability_start)).sum())
-    rows.append(dict(check="lines ordered after their pickup window opens", status="info", detail=str(n)))
+    rows.append(dict(check="linhas encomendadas depois de abrir a janela de recolha", status="info", detail=str(n)))
     return pd.DataFrame(rows)
 
 
-# --------------------------------------------------------------------------- item-level checker
+# --------------------------------------------------------------------------- verificador por linha
 @dataclass
 class Stop:
     vid: int
-    action: str                 # pickup | unload | load | delivery | return
+    action: str                 # pickup | unload | load | delivery | return (recolha, descarga, carga, entrega, regresso)
     loc: int
     items: tuple[int, ...]
-    start: float                # service start (minutes since start_date)
+    start: float                # início do serviço (minutos desde start_date)
 
 
 @dataclass
@@ -525,7 +526,7 @@ class CheckResult:
 
 
 def to_stops(p: Problem, ev: Evaluation) -> list[Stop]:
-    """Explicit, item-level stop list of an evaluated solution."""
+    """Lista explícita de paragens, linha a linha, de uma solução avaliada."""
     out = []
     for ts in sorted(ev.trips, key=lambda t: (t.vid, t.depart)):
         items = tuple(i for rid, _, _ in ts.stops for i in p.requests[rid].items)
@@ -540,7 +541,7 @@ def to_stops(p: Problem, ev: Evaluation) -> list[Stop]:
 
 
 def check_items(data_dir: str | Path, stops: list[Stop], tol: float = 1e-6) -> CheckResult:
-    """Replay a stop list against the raw CSVs and report every violated rule."""
+    """Repete uma lista de paragens contra os CSV originais e reporta todas as regras violadas."""
     t = read_tables(data_dir)
     rules = t["rules"].set_index("rule")["value"]
     start = pd.Timestamp(rules["start_date"])
@@ -568,59 +569,59 @@ def check_items(data_dir: str | Path, stops: list[Stop], tol: float = 1e-6) -> C
     count = {a: {} for a in ("pickup", "unload", "load", "delivery")}
     for vid in sorted({s.vid for s in stops}):
         if vid not in cap:
-            errors.append(f"unknown vehicle {vid}")
+            errors.append(f"veículo desconhecido {vid}")
             continue
         loc, free, onboard = home[vid], 0.0, set()
         for k, s in enumerate(x for x in stops if x.vid == vid):
-            tag = f"v{vid} stop {k + 1} ({s.action} @ {s.loc})"
+            tag = f"v{vid} paragem {k + 1} ({s.action} @ {s.loc})"
             if (loc, s.loc) not in arcs and loc != s.loc:
-                errors.append(f"{tag}: unknown arc")
+                errors.append(f"{tag}: arco desconhecido")
                 continue
             dkm, dmin = arcs.get((loc, s.loc), (0.0, 0.0))
             km += dkm
             if s.start + tol < free + dmin:
-                errors.append(f"{tag}: starts before the vehicle can arrive")
+                errors.append(f"{tag}: começa antes de o veículo poder chegar")
             if s.action in ("unload", "load") and s.loc not in centers:
-                errors.append(f"{tag}: warehouse operation outside a collection center")
+                errors.append(f"{tag}: operação de armazém fora de um centro de recolha")
             for i in s.items:
                 if i not in line:
-                    errors.append(f"{tag}: unknown line {i}")
+                    errors.append(f"{tag}: linha desconhecida {i}")
                     continue
                 L = line[i]
                 count[s.action][i] = count[s.action].get(i, 0) + 1 if s.action in count else 0
                 if s.action == "pickup":
                     if s.loc != L["pickup"]:
-                        errors.append(f"{tag}: line {i} is not at this producer")
+                        errors.append(f"{tag}: a linha {i} não é deste produtor")
                     if not L["a"][0] - tol <= s.start <= L["a"][1] + tol:
-                        errors.append(f"{tag}: line {i} picked outside its availability window")
+                        errors.append(f"{tag}: linha {i} recolhida fora da janela de disponibilidade")
                 if s.action == "delivery":
                     if s.loc != L["delivery"]:
-                        errors.append(f"{tag}: line {i} delivered to the wrong place")
+                        errors.append(f"{tag}: linha {i} entregue no local errado")
                     if not L["d"][0] - tol <= s.start <= L["d"][1] + tol:
-                        errors.append(f"{tag}: line {i} delivered outside its window")
+                        errors.append(f"{tag}: linha {i} entregue fora da janela")
                 if s.action in ("pickup", "load"):
                     if i in onboard:
-                        errors.append(f"{tag}: line {i} already on board")
+                        errors.append(f"{tag}: a linha {i} já está a bordo")
                     onboard.add(i)
                 elif s.action in ("unload", "delivery"):
                     if i not in onboard:
-                        errors.append(f"{tag}: line {i} is not on board")
+                        errors.append(f"{tag}: a linha {i} não está a bordo")
                     onboard.discard(i)
                 if s.action == "unload":
-                    events.append((s.start + handling, 0, i, s.start, tag))   # stock available after unloading
+                    events.append((s.start + handling, 0, i, s.start, tag))   # stock disponível depois de descarregar
                 if s.action == "load":
                     events.append((s.start, 1, i, s.start, tag))
             load = sum(line[i]["w"] for i in onboard)
             if load > cap[vid] + tol:
-                errors.append(f"{tag}: capacity exceeded ({load:.1f} kg)")
+                errors.append(f"{tag}: capacidade excedida ({load:.1f} kg)")
             dur = service if s.action in ("pickup", "delivery") else handling if s.action in ("unload", "load") else 0
             free, loc = s.start + dur, s.loc
             if free > horizon + tol:
-                errors.append(f"{tag}: ends after the planning horizon")
+                errors.append(f"{tag}: acaba depois do horizonte de planeamento")
         if onboard:
-            errors.append(f"v{vid}: finishes with lines on board {sorted(onboard)}")
+            errors.append(f"v{vid}: acaba com linhas a bordo {sorted(onboard)}")
         if loc != home[vid]:
-            errors.append(f"v{vid}: does not return to its collection center")
+            errors.append(f"v{vid}: não volta ao seu centro de recolha")
 
     stock, level = {}, 0.0
     for when, kind, i, arrived, tag in sorted(events):
@@ -628,18 +629,18 @@ def check_items(data_dir: str | Path, stops: list[Stop], tol: float = 1e-6) -> C
             stock[i] = arrived
             level += line[i]["w"]
             if level > sum(centers.values()) + tol:
-                errors.append(f"{tag}: warehouse capacity exceeded")
+                errors.append(f"{tag}: capacidade do armazém excedida")
         elif i not in stock:
-            errors.append(f"{tag}: line {i} loaded before being unloaded at the warehouse")
+            errors.append(f"{tag}: linha {i} carregada antes de ser descarregada no armazém")
         else:
             arrived = stock.pop(i)
             level -= line[i]["w"]
             if when - arrived > dwell_max + tol:
-                errors.append(f"{tag}: line {i} stayed {(when - arrived) / 60:.1f} h in the warehouse")
+                errors.append(f"{tag}: a linha {i} ficou {(when - arrived) / 60:.1f} h no armazém")
     for i in line:
         for a in count:
             if count[a].get(i, 0) != 1:
-                errors.append(f"line {i}: {a} done {count[a].get(i, 0)} times (expected 1)")
+                errors.append(f"linha {i}: {a} feito {count[a].get(i, 0)} vezes (esperado 1)")
     return CheckResult(not errors, km, errors)
 
 
@@ -647,7 +648,7 @@ def check_solution(p: Problem, ev: Evaluation) -> CheckResult:
     return check_items(p.data_dir, to_stops(p, ev))
 
 
-# =========================================================================== figures
+# =========================================================================== figuras
 KIND_STYLE = {"producer": ("tab:green", "^", "produtor"),
               "collection_center": ("black", "s", "centro de recolha"),
               "delivery_location": ("tab:blue", "o", "local de entrega")}
@@ -672,7 +673,7 @@ def plot_locations(p: Problem, ax=None, labels: bool = True):
 
 
 def plot_routes(p: Problem, sol: Solution, title: str = "", day: int | None = None):
-    """One panel per vehicle; pickup trips dashed, delivery trips solid."""
+    """Um painel por veículo; viagens de recolha a tracejado, de entrega a cheio."""
     xy = p.locations.set_index("location_id")[["longitude", "latitude"]]
     ev = evaluate(p, sol)
     vids = sorted(sol)
@@ -695,8 +696,8 @@ def plot_routes(p: Problem, sol: Solution, title: str = "", day: int | None = No
 
 
 def plot_gantt(p: Problem, ev: Evaluation, title: str = "", hours: tuple[int, int] = (5, 19)):
-    """One panel per day. For each vehicle: trips (bars, from loading/departure to the vehicle
-    being free again), service start at each stop (ticks) and the stop windows (thin lines)."""
+    """Um painel por dia. Para cada veículo: viagens (barras, da carga ou partida até o veículo
+    ficar livre outra vez), início do serviço em cada paragem (traços) e janelas (linhas finas)."""
     vids = sorted({t.vid for t in ev.trips})
     days = sorted({int(t.depart // 1440) for t in ev.trips})
     fig, axes = plt.subplots(1, len(days), figsize=(7.5 * len(days), 1.6 + 1.4 * len(vids)), squeeze=False)

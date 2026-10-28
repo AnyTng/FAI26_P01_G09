@@ -1,11 +1,11 @@
-"""Informed search (Greedy best-first and A*) over partial routing solutions.
+"""Pesquisa informada (Greedy best-first e A*) sobre soluções parciais de rotas.
 
-A node is a :class:`State` (partial solution). Actions extend ONE vehicle:
-  * visit an unserved request (opening a trip if the vehicle is idle at the warehouse), or
-  * close the open trip (return to the warehouse).
-Children violating any hard constraint (window, capacity, dwell, precedence) are discarded,
-and nodes where some request can no longer be reached in time are pruned.
-Path cost g = km travelled; heuristics are admissible lower bounds on the remaining km.
+Um nó é um :class:`State` (solução parcial). Cada ação estende UM veículo:
+  * visitar um pedido por servir (abrindo uma viagem se o veículo estiver parado no armazém), ou
+  * fechar a viagem em curso (voltar ao armazém).
+Os filhos que violam alguma restrição forte (janela, capacidade, permanência, precedência) são
+descartados, e os nós em que algum pedido já não pode ser alcançado a tempo são podados.
+Custo do caminho g = km percorridos; as heurísticas são limites inferiores admissíveis dos km que faltam.
 """
 from __future__ import annotations
 
@@ -20,12 +20,12 @@ from .model import DAY, DELIVERY, PICKUP, Problem, Solution, State, VState, simu
 Heuristic = Callable[[Problem, State], float]
 
 
-# --------------------------------------------------------------------------- successors
+# --------------------------------------------------------------------------- sucessores
 def successors(p: Problem, s: State):
     arrival = dict(s.arrival_w)
     unserved = [r for r in p.requests if r not in s.served]
     for i, v in enumerate(s.vehicles):
-        # 1) close the open trip
+        # 1) fechar a viagem em curso
         if v.kind is not None:
             ts = simulate_trip(p, v.vid, list(v.trip), v.trip_free, arrival)
             nv = VState(v.vid, p.depot, ts.end, done=v.done + (v.trip,))
@@ -34,13 +34,13 @@ def successors(p: Problem, s: State):
                 arr = tuple(sorted(arr + tuple((r, ts.back) for r in v.trip)))
             g = s.g - v.trip_km + ts.km
             yield State(s.vehicles[:i] + (nv,) + s.vehicles[i + 1:], s.served, arr, g)
-        # 2) visit an unserved request
+        # 2) visitar um pedido por servir
         for r in unserved:
             q = p.requests[r]
             if v.kind not in (None, q.kind):
-                continue                                    # trips are homogeneous
+                continue                                    # as viagens são homogéneas
             if q.kind == DELIVERY and not all(d in arrival for d in q.deps):
-                continue                                    # products not yet at the warehouse
+                continue                                    # os produtos ainda não estão no armazém
             free = v.trip_free if v.kind else v.time
             ts = simulate_trip(p, v.vid, list(v.trip) + [r], free, arrival)
             if ts.late > 0 or ts.over > 0 or ts.dwell > 0 or ts.overnight:
@@ -51,12 +51,12 @@ def successors(p: Problem, s: State):
 
 
 def dead_end(p: Problem, s: State) -> bool:
-    """True if some unserved request can no longer be started inside its window by any vehicle
-    (optimistic bound: direct travel, no waiting, no capacity issues). For deliveries it also
-    uses the earliest moment their pickups can possibly be back at the warehouse."""
+    """True se algum pedido por servir já não puder começar dentro da janela com nenhum veículo
+    (limite otimista: viagem direta, sem esperas, sem problemas de capacidade). Nas entregas usa
+    também o primeiro momento em que as suas recolhas podem estar de volta ao armazém."""
     W = p.depot
-    known = dict(s.arrival_w)                                   # closed pickup trips
-    at_w = dict(known)                                          # lower bound on warehouse arrival
+    known = dict(s.arrival_w)                                   # viagens de recolha fechadas
+    at_w = dict(known)                                          # limite inferior da chegada ao armazém
     for v in s.vehicles:
         if v.kind == PICKUP:
             for r in v.trip:
@@ -74,7 +74,7 @@ def dead_end(p: Problem, s: State) -> bool:
         return max(best, q.tw[0])
 
     pending = [r for r in p.requests if r not in s.served]
-    for r in pending:                                           # pickups first: deliveries depend on them
+    for r in pending:                                           # recolhas primeiro: as entregas dependem delas
         q = p.requests[r]
         if q.kind == PICKUP:
             t = earliest(q)
@@ -90,23 +90,24 @@ def dead_end(p: Problem, s: State) -> bool:
                 return True
             closed = [known[d] for d in q.deps if d in known]
             if closed:
-                # lower bound on the loading time of q's trip: its products must be ready, and the
-                # trip loads just in time for whichever stop opens it - a pending delivery of the
-                # same day or the first stop of an open delivery trip (not necessarily q itself)
+                # limite inferior da hora de carga da viagem de q: os produtos têm de estar prontos,
+                # e a viagem carrega just in time para a paragem que a abre - uma entrega pendente do
+                # mesmo dia ou a primeira paragem de uma viagem de entrega em curso (não
+                # necessariamente o próprio q)
                 day = q.tw[0] // DAY
                 firsts = [o.tw[0] - p.t(W, o.loc) - p.handling for o in (p.requests[x] for x in pending)
                           if o.kind == DELIVERY and o.tw[0] // DAY == day]
                 firsts += [f.tw[0] - p.t(W, f.loc) - p.handling for f in
                            (p.requests[v.trip[0]] for v in s.vehicles if v.kind == DELIVERY) if f.tw[0] // DAY == day]
                 if max(ready, min(firsts)) - min(closed) > p.max_dwell + 1e-9:
-                    return True                                 # cannot load before the dwell limit
+                    return True                                 # não consegue carregar antes do limite de permanência
     return False
 
 
-# --------------------------------------------------------------------------- heuristics
+# --------------------------------------------------------------------------- heurísticas
 def h_max_detour(p: Problem, s: State) -> float:
-    """h1: the farthest unserved request must still be reached by some vehicle and then
-    brought back to the warehouse: max_r min_v [d(v, r) + d(r, W)] (triangle inequality)."""
+    """h1: o pedido por servir mais distante ainda tem de ser alcançado por algum veículo e depois
+    trazido para o armazém: max_r min_v [d(v, r) + d(r, W)] (desigualdade triangular)."""
     W = p.depot
     out = [v for v in s.vehicles if v.kind is not None]
     h = max((p.d(v.loc, W) for v in out), default=0.0)
@@ -120,15 +121,15 @@ def h_max_detour(p: Problem, s: State) -> float:
 
 
 def _group(p: Problem, rid: str) -> tuple[int, str]:
-    """(day, kind) of a request: a trip never crosses midnight and is homogeneous, so only
-    requests of the same group can follow each other inside a trip."""
+    """(dia, tipo) de um pedido: uma viagem nunca passa a meia-noite e é homogénea, por isso só
+    pedidos do mesmo grupo podem seguir-se dentro de uma viagem."""
     q = p.requests[rid]
     return int(q.tw[0] // DAY), q.kind
 
 
 def _groups(p: Problem, s: State):
-    """For each (day, kind) group still active: unserved locations, open-trip vehicle locations,
-    number of returns to the warehouse still needed (open trips + extra trips by weight)."""
+    """Para cada grupo (dia, tipo) ainda ativo: locais por servir, locais dos veículos com viagem em
+    curso e número de regressos ao armazém que ainda faltam (viagens em curso + viagens extra pelo peso)."""
     cap = max(v.capacity for v in p.vehicles)
     nodes: dict[tuple[int, str], set[int]] = {}
     weight: dict[tuple[int, str], float] = {}
@@ -141,7 +142,7 @@ def _groups(p: Problem, s: State):
     for v in s.vehicles:
         if v.kind is not None:
             opened.setdefault(_group(p, v.trip[0]), []).append(v)
-    for g in sorted(nodes.keys() | opened.keys()):         # fixed order: h is a float sum
+    for g in sorted(nodes.keys() | opened.keys()):         # ordem fixa: h é uma soma em vírgula flutuante
         vs = opened.get(g, [])
         spare = sum(p.vehicle(v.vid).capacity - sum(p.requests[r].weight for r in v.trip) for v in vs)
         new_trips = max(0, -(-(weight.get(g, 0.0) - spare) // cap)) if g in nodes else 0
@@ -152,8 +153,8 @@ def _groups(p: Problem, s: State):
 
 
 def _incompatible(p: Problem) -> set[frozenset]:
-    """Pairs of requests that can never share a trip: windows, weight, or - for deliveries - the
-    earliest moment their products can be at the warehouse (a trip loads only when all are)."""
+    """Pares de pedidos que nunca podem partilhar viagem: janelas, peso ou - nas entregas - o
+    primeiro momento em que os produtos podem estar no armazém (uma viagem só carrega quando estão todos)."""
     if "incompatible" not in p.cache:
         cap, bad, W = max(v.capacity for v in p.vehicles), set(), p.depot
         ready = {r: max((p.requests[d].tw[0] + p.service + p.t(p.requests[d].loc, W) + p.handling
@@ -173,7 +174,7 @@ def _incompatible(p: Problem) -> set[frozenset]:
 
 
 def _clique(p: Problem, rids: list[str]) -> int:
-    """Size of a (greedy) clique of mutually incompatible requests: each needs its own trip."""
+    """Tamanho de uma clique (gulosa) de pedidos incompatíveis entre si: cada um precisa da sua viagem."""
     bad = _incompatible(p)
     deg = {r: sum(frozenset((r, o)) in bad for o in rids if o != r) for r in rids}
     clique: list[str] = []
@@ -188,37 +189,38 @@ def _min_return(p: Problem, locs, vlocs) -> float:
 
 
 def h_min_arcs(p: Problem, s: State) -> float:
-    """h2: relaxation on distinct (location, day, kind) nodes.
-    * every unserved node needs one incoming arc, coming from the warehouse, from another node of
-      the same (day, kind) group, or from a vehicle whose open trip belongs to that group;
-    * every trip still open or still needed ends with one arc back to the warehouse.
-    Each arc counted is distinct in any completion, so the sum of their minima is admissible."""
+    """h2: relaxação sobre nós distintos (local, dia, tipo).
+    * cada nó por servir precisa de um arco de entrada, vindo do armazém, de outro nó do mesmo
+      grupo (dia, tipo) ou de um veículo cuja viagem em curso pertence a esse grupo;
+    * cada viagem ainda em curso ou ainda necessária acaba com um arco de regresso ao armazém.
+    Cada arco contado é distinto em qualquer completamento, por isso a soma dos mínimos é admissível."""
     W, h = p.depot, 0.0
     for g, locs, vlocs, n_ret in _groups(p, s):
         for loc in locs:
-            if loc not in vlocs:                           # an open trip already standing there costs 0
+            if loc not in vlocs:                           # uma viagem em curso que já está nesse local custa 0
                 h += min([p.d(W, loc)] + [p.d(a, loc) for a in vlocs] + [p.d(b, loc) for b in locs if b != loc])
         h += n_ret * _min_return(p, locs, vlocs)
     return h
 
 
 def h_mst(p: Problem, s: State) -> float:
-    """h3: per (day, kind) group, removing the final return arc of every remaining trip leaves a
-    forest rooted at the warehouse (open vehicles hang from it at cost 0) that spans all unserved
-    locations -> its cost is >= the minimum spanning tree. Add the cheapest return arcs."""
+    """h3: em cada grupo (dia, tipo), tirar o arco de regresso de cada viagem que falta deixa uma
+    floresta com raiz no armazém (os veículos em curso ligam-se a ela com custo 0) que cobre todos
+    os locais por servir -> o seu custo é >= a árvore de cobertura mínima. Somam-se os arcos de
+    regresso mais baratos."""
     return sum(_mst_bounds(p, s).values())
 
 
 def _mst_bounds(p: Problem, s: State) -> dict[tuple[int, str], float]:
-    """The h3 bound of every active (day, kind) group."""
+    """O limite h3 de cada grupo (dia, tipo) ativo."""
     W, out = p.depot, {}
     for g, locs, vlocs, n_ret in _groups(p, s):
         bound = _prim(p, {W, *vlocs}, set(locs)) + n_ret * _min_return(p, locs, vlocs)
         if locs and not vlocs:
-            # 1-tree style bound: with m trips, removing the warehouse leaves at most m connected
-            # pieces covering every location (>= MST minus its m-1 longest edges), and the
-            # warehouse has 2m incident edges, each >= the closest location. Locations can be
-            # revisited by several trips, so nothing stronger is assumed for those 2m edges.
+            # limite do tipo 1-tree: com m viagens, tirar o armazém deixa no máximo m componentes
+            # que cobrem todos os locais (>= MST menos as suas m-1 arestas mais longas), e o armazém
+            # tem 2m arestas incidentes, cada uma >= ao local mais próximo. Os locais podem ser
+            # revisitados por várias viagens, por isso não se assume nada mais forte para essas 2m arestas.
             edges = sorted(_prim_edges(p, set(locs)), reverse=True)
             tree, w_min = sum(edges), min(p.d(W, b) for b in locs)
             lo = max(n_ret, 1)
@@ -229,19 +231,20 @@ def _mst_bounds(p: Problem, s: State) -> dict[tuple[int, str], float]:
 
 
 class _RelaxedVRP:
-    """Exact solution of a relaxation, computed once per problem and (day, kind) group.
+    """Solução exata de uma relaxação, calculada uma vez por problema e por grupo (dia, tipo).
 
-    Relaxation: each group is served on its own by an unlimited fleet of the largest vehicle,
-    every trip leaving the warehouse as early as allowed (deliveries: once the earliest possible
-    return of their pickups has been unloaded and the trip loaded). Kept: windows, service and
-    handling times, capacity, no overnight trips. Vehicle sharing between groups, exact pickup
-    times and the dwell limit are dropped, so the optimum of the relaxation is a lower bound.
+    Relaxação: cada grupo é servido sozinho por uma frota ilimitada do maior veículo, e cada viagem
+    sai do armazém o mais cedo possível (entregas: assim que o regresso mais cedo possível das suas
+    recolhas foi descarregado e a viagem carregada). Mantêm-se as janelas, os tempos de serviço e
+    de manuseamento, a capacidade e a regra da meia-noite. Largam-se a partilha de veículos entre
+    grupos, as horas exatas das recolhas e o limite de permanência, por isso o ótimo da relaxação é
+    um limite inferior.
 
-    1. Feasible trips: labelling over (subset, last request) with the earliest service time
-       (exact for feasibility, since waiting is allowed) and the least km (a lower bound on
-       the km of any feasible order). For deliveries one pass per "ready level" fixes the
-       departure time of the trips whose latest-ready request has that level.
-    2. f(U) = min-cost partition of the unserved set U into feasible trips (memoised DP).
+    1. Viagens viáveis: etiquetas sobre (subconjunto, último pedido) com a hora de serviço mais
+       cedo (exata para a viabilidade, porque esperar é permitido) e os menores km (um limite
+       inferior dos km de qualquer ordem viável). Nas entregas, uma passagem por "nível de
+       prontidão" fixa a hora de partida das viagens cujo pedido pronto mais tarde tem esse nível.
+    2. f(U) = partição de custo mínimo do conjunto por servir U em viagens viáveis (PD com memória).
     """
 
     def __init__(self, p: Problem):
@@ -270,7 +273,7 @@ class _RelaxedVRP:
                     if st <= Q[i].tw[1] and Q[i].weight <= cap:
                         lab[1 << i, i] = [st + p.service, p.d(W, Q[i].loc), Q[i].weight]
                         frontier.append((1 << i, i))
-                while frontier:                                   # breadth-first over subset size
+                while frontier:                                   # em largura, pelo tamanho do subconjunto
                     nxt = []
                     for m, j in frontier:
                         tj, kj, wj = lab[m, j]
@@ -290,9 +293,9 @@ class _RelaxedVRP:
                     frontier = nxt
                 for (m, j), (tj, kj, _) in lab.items():
                     if tj + p.t(Q[j].loc, W) > (day + 1) * DAY:
-                        continue                                  # would not be back before midnight
+                        continue                                  # não voltaria antes da meia-noite
                     if kind == DELIVERY and max(ready[R[i]] for i in range(len(R)) if m >> i & 1) != L:
-                        continue                                  # belongs to another ready level
+                        continue                                  # pertence a outro nível de prontidão
                     trips[m] = min(trips.get(m, float("inf")), kj + p.d(Q[j].loc, W))
             low: dict[int, list[tuple[int, float]]] = {}
             for m, c in trips.items():
@@ -302,12 +305,12 @@ class _RelaxedVRP:
             self.by_low[g], self.memo[g] = low, {0: 0.0}
 
     def f(self, g, U: int) -> float:
-        """Least km to serve the requests of mask U of group g (inf if impossible)."""
+        """Menor número de km para servir os pedidos da máscara U do grupo g (inf se for impossível)."""
         memo = self.memo[g]
         if U in memo:
             return memo[U]
         stack, order = [U], []
-        while stack:                                              # iterative DFS (no recursion limit)
+        while stack:                                              # DFS iterativa (sem limite de recursão)
             V = stack.pop()
             if V in memo:
                 continue
@@ -323,10 +326,10 @@ class _RelaxedVRP:
 
 
 def h_relaxed(p: Problem, s: State) -> float:
-    """h4: per (day, kind) group, the best of h3 and the exact optimum of a relaxed routing
-    problem (see :class:`_RelaxedVRP`). With open trips the relaxed optimum is reduced by
-    d(W, vehicle) for each one: finishing an open trip through a set S costs at least a fresh
-    trip through S minus that distance (triangle inequality)."""
+    """h4: em cada grupo (dia, tipo), o melhor entre a h3 e o ótimo exato de um problema de rotas
+    relaxado (ver :class:`_RelaxedVRP`). Com viagens em curso, o ótimo relaxado é reduzido em
+    d(W, veículo) por cada uma: acabar uma viagem em curso por um conjunto S custa pelo menos uma
+    viagem nova por S menos essa distância (desigualdade triangular)."""
     rv = _relaxed(p)
     mask: dict[tuple[int, str], int] = {}
     for r in p.requests:
@@ -346,7 +349,7 @@ def h_relaxed(p: Problem, s: State) -> float:
 
 
 def _prim_edges(p: Problem, nodes: set[int]) -> list[float]:
-    """Edge lengths of a minimum spanning tree over ``nodes``."""
+    """Comprimentos das arestas de uma árvore de cobertura mínima sobre ``nodes``."""
     if len(nodes) < 2:
         return []
     first, *rest = nodes
@@ -361,7 +364,7 @@ def _prim_edges(p: Problem, nodes: set[int]) -> list[float]:
 
 
 def _prim(p: Problem, roots: set[int], nodes: set[int]) -> float:
-    """MST cost connecting ``nodes`` to the (already connected) ``roots``."""
+    """Custo da MST que liga ``nodes`` às ``roots`` (já ligadas entre si)."""
     best = {b: min(p.d(a, b) for a in roots) for b in nodes - roots}
     total = 0.0
     while best:
@@ -380,7 +383,7 @@ HEURISTICS = {"h1_max_detour": h_max_detour, "h2_min_arcs": h_min_arcs, "h3_mst"
               "h0_zero": h_zero}
 
 
-# --------------------------------------------------------------------------- search
+# --------------------------------------------------------------------------- pesquisa
 @dataclass
 class SearchResult:
     algorithm: str
@@ -391,7 +394,7 @@ class SearchResult:
     generated: int
     pruned: int
     seconds: float
-    complete: bool              # False if stopped by the expansion limit
+    complete: bool              # False se parou pelo limite de expansões
 
     def summary(self) -> dict:
         return dict(algorithm=self.algorithm, heuristic=self.heuristic,
@@ -401,7 +404,7 @@ class SearchResult:
 
 
 def latest_loads(p: Problem) -> dict[str, float]:
-    """For each pickup, the latest moment any delivery that needs it could start loading."""
+    """Para cada recolha, o último momento em que alguma entrega que precisa dela pode começar a carregar."""
     out: dict[str, float] = {}
     for q in p.requests.values():
         for d in q.deps:
@@ -410,15 +413,16 @@ def latest_loads(p: Problem) -> dict[str, float]:
 
 
 def dwell_safe(p: Problem, s: State, latest: dict[str, float]) -> bool:
-    """True if no pending delivery of s can ever break the dwell limit, whatever its schedule:
-    then arriving earlier at the warehouse can only help, and <= dominance on arrivals is exact."""
+    """True se nenhuma entrega pendente de s puder alguma vez violar o limite de permanência, seja
+    qual for o horário: nesse caso chegar mais cedo ao armazém só ajuda, e a dominância <= sobre as
+    chegadas é exata."""
     return all(latest.get(r, -1e18) - t <= p.max_dwell + 1e-9 for r, t in s.arrival_w)
 
 
 def _dominated(store: dict, key, g: float, times: tuple) -> bool:
-    """s is dominated by a stored state with the same key, lower-or-equal cost and clocks.
-    Stored states are only used for this when they are dwell-safe (flag), which makes the
-    pruning exact (no optimal solution is ever discarded)."""
+    """s é dominado por um estado guardado com a mesma chave e custo e relógios menores ou iguais.
+    Os estados guardados só servem para isto quando são dwell-safe (flag), o que torna a poda
+    exata (nunca se descarta uma solução ótima)."""
     for g0, t0, safe in store.get(key, ()):
         if g0 <= g + 1e-9 and (all(a <= b + 1e-9 for a, b in zip(t0, times)) if safe else t0 == times):
             return True
@@ -426,9 +430,9 @@ def _dominated(store: dict, key, g: float, times: tuple) -> bool:
 
 
 def chronological(p: Problem, s: State, children: list[State]) -> list[State]:
-    """Keep only the moves of the vehicle with the earliest clock among those that can move.
-    Not used by A* (it could cut the optimum); it stops Greedy from sending one vehicle into
-    the next day while the other one still has pending work."""
+    """Fica só com os movimentos do veículo com o relógio mais atrasado entre os que se podem mover.
+    O A* não a usa (podia cortar o ótimo); serve para o Greedy não mandar um veículo para o dia
+    seguinte enquanto o outro ainda tem trabalho pendente."""
     by_vehicle: dict[int, list[State]] = {}
     for c in children:
         i = next(k for k, (a, b) in enumerate(zip(s.vehicles, c.vehicles)) if a is not b)
@@ -442,11 +446,11 @@ def chronological(p: Problem, s: State, children: list[State]) -> list[State]:
 def best_first(p: Problem, h: Heuristic, w_g: float, w_h: float, name: str,
                max_expansions: int = 200_000, chrono: bool = False, succ=None,
                time_limit: float = float("inf")) -> SearchResult:
-    """Generic best-first search with f = w_g * g + w_h * h.
-    A* -> (1, 1); Greedy best-first -> (0, 1); Weighted A* -> (1, w>1).
-    chrono=True restricts each expansion to the earliest vehicle (see :func:`chronological`).
-    succ: successor function (default: stop-by-stop :func:`successors`).
-    The search stops (without a proof) after max_expansions or time_limit seconds."""
+    """Pesquisa best-first genérica com f = w_g * g + w_h * h.
+    A* -> (1, 1); Greedy best-first -> (0, 1); A* ponderado -> (1, w>1).
+    chrono=True limita cada expansão ao veículo mais atrasado (ver :func:`chronological`).
+    succ: função de sucessores (por omissão: :func:`successors`, paragem a paragem).
+    A pesquisa pára (sem prova) ao fim de max_expansions ou de time_limit segundos."""
     succ = succ or successors
     t0 = _time.perf_counter()
     tie = itertools.count()
@@ -461,7 +465,7 @@ def best_first(p: Problem, h: Heuristic, w_g: float, w_h: float, name: str,
             return SearchResult(name, h.__name__, s.solution(), s.g, expanded, generated, pruned,
                                 _time.perf_counter() - t0, True)
         if expanded >= max_expansions or _time.perf_counter() - t0 > time_limit:
-            frontier.append(None)                           # stopped by the budget: not exhaustive
+            frontier.append(None)                           # parou pelo orçamento: não é exaustiva
             break
         expanded += 1
         children = list(succ(p, s))
@@ -492,13 +496,13 @@ def weighted_astar(p: Problem, h: Heuristic = h_min_arcs, w: float = 2.0, **kw) 
     return best_first(p, h, 1.0, w, f"WA*(w={w})", **kw)
 
 
-# --------------------------------------------------------------------------- trip-level search
+# --------------------------------------------------------------------------- pesquisa por viagens
 @dataclass(frozen=True)
 class TripOption:
-    """One way of doing a trip: which requests, in which order, and how its timing depends on
-    the departure time D from the warehouse (max-plus form, waiting allowed):
-        back(D) = max(D + delta, c)            feasible  <=>  D <= d_max
-    jit: earliest sensible departure (arrive at the first stop when its window opens)."""
+    """Uma forma de fazer uma viagem: que pedidos, por que ordem, e como o horário depende da hora
+    de partida D do armazém (forma max-plus, esperas permitidas):
+        back(D) = max(D + delta, c)            viável  <=>  D <= d_max
+    jit: partida mais cedo que faz sentido (chegar à primeira paragem quando a janela abre)."""
     group: tuple[int, str]
     mask: int
     rids: tuple[str, ...]
@@ -512,15 +516,15 @@ class TripOption:
 
 
 class TripCatalog:
-    """All trips that can possibly be part of a solution, with dominated orders removed.
+    """Todas as viagens que podem fazer parte de uma solução, sem as ordens dominadas.
 
-    For every (day, kind) group, orders are enumerated depth-first from the earliest possible
-    departure (pickups: start of the day; deliveries: earliest moment all their products can be
-    at the warehouse, plus loading). A later real departure can only make an order infeasible,
-    so this is a superset of every trip of every feasible solution. Two orders of the same set
-    are compared on (km, delta, c, d_max, jit): if one is at least as good on all five, it is at
-    least as good for ANY departure time, any later trip and the dwell limit, so the other one is
-    dropped without losing the optimum (exact reduction)."""
+    Em cada grupo (dia, tipo), as ordens são enumeradas em profundidade a partir da partida mais
+    cedo possível (recolhas: início do dia; entregas: primeiro momento em que todos os produtos
+    podem estar no armazém, mais a carga). Uma partida real mais tarde só pode tornar uma ordem
+    inviável, por isso isto é um superconjunto de todas as viagens de todas as soluções viáveis.
+    Duas ordens do mesmo conjunto são comparadas em (km, delta, c, d_max, jit): se uma for pelo
+    menos tão boa nos cinco, é pelo menos tão boa para QUALQUER hora de partida, qualquer viagem
+    seguinte e o limite de permanência, por isso a outra é largada sem perder o ótimo (redução exata)."""
 
     def __init__(self, p: Problem):
         self.p, W = p, p.depot
@@ -548,7 +552,7 @@ class TripCatalog:
                     opt = self._option(g, order, mask | 1 << i, weight + q.weight)
                     dep0 = max(lvl, day * DAY) + (p.handling if kind == DELIVERY else 0.0)
                     if dep0 > opt.d_max or max(dep0 + opt.delta, opt.c) >= end_of_day:
-                        continue                          # infeasible now -> infeasible later too
+                        continue                          # inviável agora -> inviável também mais tarde
                     self.raw_orders += 1
                     lst = best.setdefault(opt.mask, [])
                     if not any(_dominates(o, opt) for o in lst):
@@ -563,10 +567,10 @@ class TripCatalog:
     def _option(self, g, order, mask, weight) -> TripOption:
         p, W = self.p, self.p.depot
         qs = [p.requests[r] for r in order]
-        # delta: duration with no waiting; c: return time when leaving "very early".
-        # Each service start is max(D + delta_k, c_k); it must be <= the window end, which needs
-        # D <= tw_end - delta_k (folded into d_max below) AND c_k <= tw_end (waiting forced by
-        # earlier windows) - the latter does not depend on D, so the order is simply infeasible.
+        # delta: duração sem esperas; c: hora de regresso ao sair "muito cedo".
+        # Cada início de serviço é max(D + delta_k, c_k); tem de ser <= ao fim da janela, o que exige
+        # D <= tw_end - delta_k (incluído em d_max abaixo) E c_k <= tw_end (espera imposta por
+        # janelas anteriores) - esta última não depende de D, por isso a ordem fica simplesmente inviável.
         delta, t, loc, forced_late = 0.0, -1e9, W, False
         for q in qs:
             delta += p.t(loc, q.loc)
@@ -577,7 +581,7 @@ class TripCatalog:
             loc = q.loc
         delta += p.t(loc, W)
         c = t + p.t(loc, W)
-        # d_max: latest departure that still starts every stop inside its window (backwards)
+        # d_max: partida mais tarde que ainda começa cada paragem dentro da janela (de trás para a frente)
         latest, nxt = float("inf"), None
         for q in reversed(qs):
             lt = q.tw[1] if nxt is None else min(q.tw[1], latest - p.service - p.t(q.loc, nxt.loc))
@@ -608,10 +612,11 @@ def catalog(p: Problem) -> TripCatalog:
 
 
 def trip_successors(p: Problem, s: State):
-    """Trip-level actions: an idle vehicle performs one complete trip from the catalogue.
-    The timing is computed exactly from the trip's (delta, c, d_max, jit) and the real context
-    (vehicle free time, real warehouse arrivals of the pickups), with the same rules as
-    :func:`simulate_trip`: windows, capacity, no overnight trip, dwell <= max_dwell."""
+    """Ações ao nível da viagem: um veículo parado faz uma viagem completa do catálogo.
+    O horário é calculado de forma exata a partir de (delta, c, d_max, jit) da viagem e do contexto
+    real (hora a que o veículo fica livre, chegadas reais das recolhas ao armazém), com as mesmas
+    regras de :func:`simulate_trip`: janelas, capacidade, nenhuma viagem passa a meia-noite,
+    permanência <= max_dwell."""
     cat = catalog(p)
     arrival = dict(s.arrival_w)
     served_mask: dict = {}
@@ -637,7 +642,7 @@ def trip_successors(p: Problem, s: State):
                 continue
             back = max(dep + o.delta, o.c)
             if back // DAY != load_start // DAY:
-                continue                                    # no trip crosses midnight
+                continue                                    # nenhuma viagem passa a meia-noite
             end = back + p.handling if o.group[1] == PICKUP else back
             nv = VState(v.vid, p.depot, end, done=v.done + (o.rids,))
             arr = s.arrival_w
@@ -647,7 +652,7 @@ def trip_successors(p: Problem, s: State):
 
 
 def astar_trips(p: Problem, h: Heuristic = None, **kw) -> SearchResult:
-    """A* where each action is a whole trip (same state, cost, goal and heuristics)."""
+    """A* em que cada ação é uma viagem inteira (mesmo estado, custo, objetivo e heurísticas)."""
     return best_first(p, h or h_relaxed, 1.0, 1.0, "A*-viagens", succ=trip_successors, **kw)
 
 

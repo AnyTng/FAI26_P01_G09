@@ -1,10 +1,10 @@
-"""Reproduce every experiment of the project and store the results in reports/.
+"""Reproduz todas as experiências do projeto e grava os resultados em reports/.
 
-    python run_experiments.py            # full run (exact A* on tiny takes several minutes)
-    python run_experiments.py --quick    # small budgets, for a fast check
+    python run_experiments.py            # execução completa (o A* exato no tiny demora vários minutos)
+    python run_experiments.py --quick    # orçamentos pequenos, para uma verificação rápida
 
-The notebooks read these files, so the expensive searches do not have to be re-run
-every time a notebook is opened. Every solution is re-checked with the item-level checker.
+Os notebooks leem estes ficheiros, para não ser preciso repetir as pesquisas caras sempre que
+se abre um notebook. Cada solução volta a ser verificada com o verificador linha a linha.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ H = {k: v for k, v in HEURISTICS.items() if k != "h0_zero"}
 
 
 def checked(p, sol) -> dict:
-    """Simulator + independent item-level check of one solution."""
+    """Simulador + verificação independente, linha a linha, de uma solução."""
     ev = evaluate(p, sol)
     chk = check_solution(p, ev) if ev.feasible else None
     return dict(feasible=ev.feasible, item_check=bool(chk and chk.valid), km_check=None if chk is None else round(chk.km, 2))
@@ -46,7 +46,7 @@ def informed(p, ds: str, quick: bool) -> tuple[list[dict], dict]:
     runs += [("A*", hn, lambda h: astar(p, h, **budget)) for hn in H]
     runs += [(f"WA*(w={w})", "h3_mst", (lambda w: lambda h: weighted_astar(p, h, w, **budget))(w))
              for w in (1.2, 1.5, 2.0)]
-    # trip-level A* (one action = one complete trip from the catalogue)
+    # A* por viagens (uma ação = uma viagem completa do catálogo)
     runs += [("A*-viagens", hn, lambda h: astar_trips(p, h, max_expansions=200_000, time_limit=60 if quick else 600))
              for hn in ("h3_mst", "h4_relaxed")]
     for alg, hn, run in runs:
@@ -108,7 +108,7 @@ def main(quick: bool) -> None:
     tables = {"informed": [], "local": [], "csp": [], "audit": []}
     histories, best, catalogs = {}, {}, {}
 
-    def flush():                                   # write what we have so far (a crash keeps it)
+    def flush():                                   # grava o que já existe (se houver um crash, fica guardado)
         for name, rows in tables.items():
             if rows and name != "audit":
                 pd.DataFrame(rows).to_csv(REPORTS / f"{name}.csv", index=False)
@@ -130,7 +130,7 @@ def main(quick: bool) -> None:
         tables["csp"] += crows
         flush()
 
-        # best solution of every family + overall best
+        # melhor solução de cada família + melhor de todas
         candidates = {**{k: (evaluate(p, s).km, s) for k, s in sols.items()}, **lsols,
                       **{k: (evaluate(p, s).km, s) for k, s in csols.items()}}
         for k, (km, s) in candidates.items():
@@ -154,10 +154,10 @@ def main(quick: bool) -> None:
     (REPORTS / "environment.json").write_text(json.dumps(dict(
         python=sys.version, platform=platform.platform(), pandas=pd.__version__, quick=quick,
         trip_catalog=catalogs), indent=1))
-    print("done:", {ds: (round(km, 2), k) for ds, (km, _, k) in best.items()})
+    print("concluído:", {ds: (round(km, 2), k) for ds, (km, _, k) in best.items()})
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--quick", action="store_true", help="small search budgets")
+    ap.add_argument("--quick", action="store_true", help="orçamentos de pesquisa pequenos")
     main(ap.parse_args().quick)

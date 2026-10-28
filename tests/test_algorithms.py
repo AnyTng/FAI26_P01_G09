@@ -1,8 +1,8 @@
-"""Algorithms on the synthetic fixture and on tiny (fast settings only)."""
+"""Algoritmos sobre o fixture sintético e sobre o tiny (só configurações rápidas)."""
 import unittest
 from pathlib import Path
 
-from src.csp import solve
+from src.csp import RoutingCSP, solve
 from src.informed import HEURISTICS, State, astar, astar_trips, greedy, h_mst, h_zero, trip_successors
 from src.local_search import hill_climbing, simulated_annealing
 from src.model import (DAY, DELIVERY, PICKUP, Problem, Request, Vehicle, check_solution, evaluate, load_problem,
@@ -20,7 +20,7 @@ class SearchOnFixture(Fixture):
         for name, h in HEURISTICS.items():
             r = astar(p, h)
             self.assertAlmostEqual(r.cost, ucs.cost, msg=name)
-            self.assertLessEqual(h(p, State.initial(p)), ucs.cost + 1e-9, msg=name)   # admissible at the root
+            self.assertLessEqual(h(p, State.initial(p)), ucs.cost + 1e-9, msg=name)   # admissível na raiz
             self.assertTrue(check_solution(p, evaluate(p, r.solution)).valid)
 
     def test_infeasible_instance_is_exhausted(self):
@@ -37,8 +37,9 @@ class SearchOnFixture(Fixture):
 
 class DwellPruning(unittest.TestCase):
     def test_dead_end_keeps_trip_opened_by_earlier_delivery(self):
-        """D2 alone would load too late for the 24 h limit, but a trip opened by D1 (earlier window)
-        loads in time and waits at D2. The dwell pruning must not discard that solution."""
+        """Sozinha, D2 carregaria tarde demais para o limite de 24 h, mas uma viagem aberta por D1
+        (janela mais cedo) carrega a tempo e espera em D2. A poda da permanência não pode descartar
+        essa solução."""
         H = 60
         T = {(0, 1): 30, (0, 2): 10, (0, 3): 20, (1, 2): 35, (1, 3): 45, (2, 3): 10}
         time = {k: float(v) for (a, b), v in T.items() for k in ((a, b), (b, a))}
@@ -56,8 +57,8 @@ class DwellPruning(unittest.TestCase):
 
 class PerProblemCaches(unittest.TestCase):
     def test_heuristics_do_not_leak_between_problems(self):
-        """Derived structures are cached on the Problem itself, so a new instance (even one that
-        reuses the memory address of a freed one) never sees another instance's data."""
+        """As estruturas derivadas ficam em cache no próprio Problem, por isso uma instância nova
+        (mesmo que reutilize o endereço de memória de uma já libertada) nunca vê dados de outra."""
         expected = {ds: h_mst(load_problem(ROOT / "data" / ds), State.initial(load_problem(ROOT / "data" / ds)))
                     for ds in ("tiny", "small")}
         for ds in ("small", "tiny") * 3:
@@ -74,7 +75,7 @@ class TripLevelSearch(Fixture):
 
 class TripLevelOnTiny(unittest.TestCase):
     def test_trip_timing_matches_simulator(self):
-        """Every child of the trip-level search must match simulate_trip exactly."""
+        """Cada filho da pesquisa por viagens tem de coincidir exatamente com simulate_trip."""
         p = load_problem(ROOT / "data" / "tiny")
         frontier, seen = [State.initial(p)], 0
         while frontier and seen < 300:
@@ -131,6 +132,15 @@ class OnTiny(unittest.TestCase):
             r = solve(self.p, inference=inference)
             self.assertTrue(r.feasible, r.summary())
             self.assertTrue(check_solution(self.p, evaluate(self.p, r.solution)).valid)
+
+    def test_csp_orders_trips_from_the_real_departure(self):
+        # era rejeitada (18,6 min de atraso) quando a ordem das viagens era escolhida como se o
+        # veículo saísse às 00:00; a partir da hora real de saída, outra ordem cumpre todas as janelas
+        csp = RoutingCSP(self.p)
+        assign = {"D9": (1, 1, 0), "P1": (1, 0, 1), "P2": (1, 1, 1), "P3": (1, 0, 1), "P4": (1, 1, 1),
+                  "P5": (2, 0, 1)}
+        ok, _ = csp.global_ok(assign)
+        self.assertTrue(ok)
 
 
 if __name__ == "__main__":

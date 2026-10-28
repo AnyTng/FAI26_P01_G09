@@ -1,13 +1,13 @@
-"""Local search on complete solutions: Hill Climbing (steepest / first improvement) and
+"""Pesquisa local sobre soluções completas: Hill Climbing (steepest / first improvement) e
 Simulated Annealing.
 
-Neighbourhood (every move keeps trips homogeneous):
-  * relocate  - move one request to another position, trip or vehicle, or to a new trip;
-  * swap      - exchange two requests of the same kind;
-  * 2-opt     - reverse a segment inside one trip.
-Solutions are scored with ``Evaluation.penalized`` (km + penalties). Hill Climbing started
-from a feasible solution only moves to feasible neighbours; Simulated Annealing may walk
-through infeasible solutions but returns the best FEASIBLE one it visited.
+Vizinhança (todos os movimentos mantêm as viagens homogéneas):
+  * relocate  - passa um pedido para outra posição, viagem ou veículo, ou para uma viagem nova;
+  * swap      - troca dois pedidos do mesmo tipo;
+  * 2-opt     - inverte um segmento dentro de uma viagem.
+As soluções são avaliadas com ``Evaluation.penalized`` (km + penalizações). O Hill Climbing,
+partindo de uma solução viável, só passa para vizinhos viáveis; o Simulated Annealing pode passar
+por soluções inviáveis, mas devolve a melhor solução VIÁVEL que visitou.
 """
 from __future__ import annotations
 
@@ -29,11 +29,11 @@ def _kind(p: Problem, trip) -> str:
 
 
 def neighbours(p: Problem, sol: Solution):
-    """Yield (move description, neighbour solution) for the whole neighbourhood."""
+    """Gera (descrição do movimento, solução vizinha) para a vizinhança inteira."""
     vids = sorted(sol)
     where = [(v, k, i, r) for v in vids for k, trip in enumerate(sol[v]) for i, r in enumerate(trip)]
 
-    # relocate
+    # relocate: mudar um pedido de sítio
     for v, k, i, r in where:
         kind = p.requests[r].kind
         base = copy.deepcopy(sol)
@@ -48,14 +48,14 @@ def neighbours(p: Problem, sol: Solution):
                     n = copy.deepcopy(base)
                     n[v2][k2].insert(j, r)
                     yield ("relocate", r, v2, k2, j), _clean(n)
-            for k2 in range(len(base[v2]) + 1):                  # open a new trip
+            for k2 in range(len(base[v2]) + 1):                  # abrir uma viagem nova
                 if v2 == v and len(sol[v][k]) == 1 and k2 in (k, k + 1):
-                    continue                                     # same solution
+                    continue                                     # a mesma solução
                 n = copy.deepcopy(base)
                 n[v2].insert(k2, [r])
                 yield ("new-trip", r, v2, k2), _clean(n)
 
-    # swap
+    # swap: trocar dois pedidos
     for a in range(len(where)):
         for b in range(a + 1, len(where)):
             va, ka, ia, ra = where[a]
@@ -66,7 +66,7 @@ def neighbours(p: Problem, sol: Solution):
             n[va][ka][ia], n[vb][kb][ib] = rb, ra
             yield ("swap", ra, rb), n
 
-    # 2-opt inside a trip
+    # 2-opt dentro de uma viagem
     for v in vids:
         for k, trip in enumerate(sol[v]):
             for i in range(len(trip) - 1):
@@ -77,7 +77,7 @@ def neighbours(p: Problem, sol: Solution):
 
 
 def random_neighbour(p: Problem, sol: Solution, rng: random.Random) -> Solution:
-    """One random move (cheap sampling for Simulated Annealing)."""
+    """Um movimento aleatório (amostragem barata para o Simulated Annealing)."""
     n = copy.deepcopy(sol)
     where = [(v, k, i) for v in n for k, t in enumerate(n[v]) for i in range(len(t))]
     move = rng.random()
@@ -112,7 +112,7 @@ class LocalResult:
     initial_cost: float
     cost: float
     feasible: bool
-    history: list[float] = field(default_factory=list)      # cost of the current solution per iteration
+    history: list[float] = field(default_factory=list)      # custo da solução atual em cada iteração
     best_history: list[float] = field(default_factory=list)
     iterations: int = 0
     evaluated: int = 0
@@ -127,8 +127,8 @@ class LocalResult:
 
 def hill_climbing(p: Problem, start: Solution, mode: str = "steepest", max_iter: int = 1000,
                   seed: int = 0) -> LocalResult:
-    """mode='steepest': best neighbour of the whole neighbourhood;
-    mode='first'   : first improving neighbour, neighbourhood visited in random order."""
+    """mode='steepest': melhor vizinho da vizinhança inteira;
+    mode='first'   : primeiro vizinho que melhora, com a vizinhança percorrida por ordem aleatória."""
     t0, rng = _time.perf_counter(), random.Random(seed)
     cur = _clean(copy.deepcopy(start))
     ev0 = evaluate(p, cur)
@@ -150,7 +150,7 @@ def hill_climbing(p: Problem, start: Solution, mode: str = "steepest", max_iter:
                 if mode == "first":
                     break
         if best is None:
-            break                                                # local optimum
+            break                                                # ótimo local
         cur, cur_cost = best, best_cost
         res.iterations += 1
         res.history.append(cur_cost)
@@ -163,12 +163,12 @@ def hill_climbing(p: Problem, start: Solution, mode: str = "steepest", max_iter:
 
 def simulated_annealing(p: Problem, start: Solution, t0: float = 50.0, alpha: float = 0.995,
                         iters: int = 20_000, seed: int = 0) -> LocalResult:
-    """Accept worse neighbours with probability exp(-delta / T); T <- alpha * T."""
+    """Aceita vizinhos piores com probabilidade exp(-delta / T); T <- alpha * T."""
     t_start, rng = _time.perf_counter(), random.Random(seed)
     cur = _clean(copy.deepcopy(start))
     ev0 = evaluate(p, cur)
     cur_cost = ev0.penalized
-    best, best_cost = cur, (ev0.km if ev0.feasible else float("inf"))     # best FEASIBLE solution
+    best, best_cost = cur, (ev0.km if ev0.feasible else float("inf"))     # melhor solução VIÁVEL
     res = LocalResult("SA", cur, cur_cost, cur_cost, False, [cur_cost], [cur_cost])
     T = t0
     for _ in range(iters):

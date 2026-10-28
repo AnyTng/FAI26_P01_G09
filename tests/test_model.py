@@ -1,7 +1,7 @@
-"""Synthetic cases for the model, the simulator and the item-level checker.
+"""Casos sintéticos para o modelo, o simulador e o verificador linha a linha.
 
-The fixture writes a 1-producer / 1-center / 2-destination dataset to a temporary folder,
-so the same CSV loader used for the real datasets is exercised.
+O fixture escreve numa pasta temporária um dataset com 1 produtor, 1 centro e 2 destinos, para
+testar o mesmo carregador de CSV que é usado nos datasets reais.
 """
 import tempfile
 import unittest
@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def write_fixture(folder: Path, capacity: float = 50.0, deliv_end: str = "2026-10-30 14:00:00",
                   order_time: str = "2026-10-29 20:00:00", deliv_start: str = "2026-10-30 09:00:00") -> Path:
-    """Locations: 1 producer, 2 center, 3 and 4 delivery. Every arc = 10 km / 10 min."""
+    """Locais: 1 produtor, 2 centro, 3 e 4 entrega. Cada arco = 10 km / 10 min."""
     tables = {
         "localities": pd.DataFrame(dict(locality_id=[1], name=["X"], municipality=["Braga"], district=["Braga"],
                                         latitude=[41.5], longitude=[-8.4])),
@@ -74,7 +74,7 @@ class Fixture(unittest.TestCase):
 class ModelTests(Fixture):
     def test_grouping_and_requests(self):
         p = self.problem(capacity=60)
-        self.assertEqual(sorted(p.requests), ["D1", "D2", "P1"])           # both lines picked in one stop
+        self.assertEqual(sorted(p.requests), ["D1", "D2", "P1"])           # as duas linhas recolhidas numa só paragem
         self.assertEqual(p.requests["P1"].weight, 60.0)
         self.assertEqual(p.requests["D1"].deps, ("P1",))
 
@@ -86,7 +86,7 @@ class ModelTests(Fixture):
         self.assertTrue(check_solution(p, ev).valid)
 
     def test_capacity_violation(self):
-        p = self.problem(capacity=50)                                      # pickup group of 60 kg is split
+        p = self.problem(capacity=50)                                      # o grupo de recolha de 60 kg é dividido
         self.assertEqual(len(p.pickups), 2)
         ev = evaluate(p, {1: [["P1", "P2"], ["D1", "D2"]]})
         self.assertGreater(ev.over, 0)
@@ -94,7 +94,7 @@ class ModelTests(Fixture):
 
     def test_delivery_needs_warehouse_first(self):
         p = self.problem(capacity=60)
-        ev = evaluate(p, {1: [["D1", "D2"], ["P1"]]})                     # delivery trip before the pickup
+        ev = evaluate(p, {1: [["D1", "D2"], ["P1"]]})                     # viagem de entrega antes da recolha
         self.assertFalse(ev.feasible)
         self.assertGreater(ev.deadlock, 0)
 
@@ -106,7 +106,7 @@ class ModelTests(Fixture):
 
     def test_order_datetime_delays_pickup(self):
         p = self.problem(capacity=60, order_time="2026-10-30 09:00:00")
-        self.assertEqual(p.items[1].avail[0], 9 * 60)                     # cannot pick before the order exists
+        self.assertEqual(p.items[1].avail[0], 9 * 60)                     # não se recolhe antes de a encomenda existir
 
     def test_unserved_and_duplicates_are_penalised(self):
         p = self.problem(capacity=60)
@@ -116,7 +116,7 @@ class ModelTests(Fixture):
     def test_cross_vehicle_transfer(self):
         p = self.problem(capacity=60)
         p.vehicles.append(type(p.vehicles[0])(2, 60.0, False, 45.0))
-        ev = evaluate(p, {2: [["D1", "D2"]], 1: [["P1"]]})                # vehicle 2 waits for vehicle 1
+        ev = evaluate(p, {2: [["D1", "D2"]], 1: [["P1"]]})                # o veículo 2 espera pelo veículo 1
         self.assertTrue(ev.feasible, ev.summary())
 
 
