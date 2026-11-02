@@ -44,7 +44,6 @@ Value = tuple[int, int, int]            # (id do veículo, dia, índice da posi�
 class CSPResult:
     solution: Solution | None
     cost: float | None
-    feasible: bool
     assignments: int = 0
     backtracks: int = 0
     checks: int = 0
@@ -101,9 +100,6 @@ class RoutingCSP:
         back = qa.tw[0] + p.service + p.t(qa.loc, W) + (p.handling if qa.kind == PICKUP else 0)
         return back + (p.handling if qb.kind == DELIVERY else 0) + p.t(W, qb.loc) <= qb.tw[1] + 1e-9
 
-    def order_key(self, val: Value) -> tuple[int, int]:
-        return val[1], val[2]
-
     def consistent(self, a: str, va: Value, b: str, vb: Value) -> bool:
         """Todas as restrições binárias entre a=va e b=vb."""
         p = self.p
@@ -113,7 +109,7 @@ class RoutingCSP:
             if p.requests[a].weight + p.requests[b].weight > p.vehicle(va[0]).capacity + 1e-9:
                 return False
         if va[0] == vb[0]:
-            ka, kb = self.order_key(va), self.order_key(vb)
+            ka, kb = va[1:], vb[1:]                         # (dia, posição): ordem das viagens no veículo
             if a in p.requests[b].deps and not ka < kb:
                 return False
             if b in p.requests[a].deps and not kb < ka:
@@ -199,7 +195,7 @@ class RoutingCSP:
         trips: dict[Value, set[str]] = {}
         for r, val in assign.items():
             trips.setdefault(val, set()).add(r)
-        queue = {v.vid: [frozenset(trips[val]) for val in sorted(trips, key=self.order_key) if val[0] == v.vid]
+        queue = {v.vid: [frozenset(trips[val]) for val in sorted(trips, key=lambda val: val[1:]) if val[0] == v.vid]
                  for v in p.vehicles}
         sol: Solution = {vid: [] for vid in queue}
         arrival_w: dict[str, float] = {}
@@ -279,7 +275,7 @@ def solve(p: Problem, inference: str = "mac", var_order: str = "mrv", value_orde
     global_fc   : depois de cada atribuição retira também, a cada variável por atribuir, os valores
                   que já fazem falhar a verificação global do horário (forte, mas caro)."""
     csp = RoutingCSP(p, template)
-    res = CSPResult(None, None, False, config=dict(inference=inference, var_order=var_order,
+    res = CSPResult(None, None, config=dict(inference=inference, var_order=var_order,
                                                    value_order=value_order, global_fc=global_fc,
                                                    optimize=optimize))
     t0 = _time.perf_counter()
@@ -343,7 +339,7 @@ def solve(p: Problem, inference: str = "mac", var_order: str = "mrv", value_orde
             res.checks += 1
             if ok and km < best[0] - 1e-9:
                 best[0] = km
-                res.solution, res.cost, res.feasible = csp.to_solution(assign), km, True
+                res.solution, res.cost = csp.to_solution(assign), km
                 res.solutions_found += 1
                 res.improvements.append((res.assignments, _time.perf_counter() - t0, km))
             return not optimize                              # pára na primeira solução, exceto ao otimizar

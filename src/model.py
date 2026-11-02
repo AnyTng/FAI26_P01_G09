@@ -84,7 +84,6 @@ class Problem:
         ids = {a for a, _ in self.dist} | {b for _, b in self.dist}
         for a in ids:
             self.dist[a, a] = self.time[a, a] = 0.0
-        self._vehicles = {v.vid: v for v in self.vehicles}
 
     def d(self, a: int, b: int) -> float:
         return self.dist[a, b]
@@ -96,14 +95,8 @@ class Problem:
     def pickups(self) -> list[str]:
         return [r for r, q in self.requests.items() if q.kind == PICKUP]
 
-    @property
-    def deliveries(self) -> list[str]:
-        return [r for r, q in self.requests.items() if q.kind == DELIVERY]
-
     def vehicle(self, vid: int) -> Vehicle:
-        if vid not in self._vehicles:                    # frota alterada depois da construção
-            self._vehicles = {v.vid: v for v in self.vehicles}
-        return self._vehicles[vid]
+        return next(v for v in self.vehicles if v.vid == vid)
 
     def clock(self, minutes: float) -> str:
         """Minutos desde o início -> 'dd HH:MM' (para mostrar)."""
@@ -129,12 +122,9 @@ def _group_pickups(items: list[Item], max_weight: float) -> list[list[Item]]:
     return groups
 
 
-def load_problem(data_dir: str | Path, grouping: str = "interval") -> Problem:
-    """Lê os CSV de um dataset e constrói um :class:`Problem`.
-
-    grouping = "interval" -> recolhas agrupadas por produtor, pelas janelas que se intersetam;
-    grouping = "order"    -> uma recolha por par (encomenda, produtor) (mais fino, mais paragens).
-    """
+def load_problem(data_dir: str | Path) -> Problem:
+    """Lê os CSV de um dataset e constrói um :class:`Problem`. As recolhas são agrupadas por
+    produtor, pelas janelas que se intersetam."""
     data_dir = Path(data_dir)
     rd = lambda f: pd.read_csv(data_dir / f"{f}.csv")
     rules = rd("rules").set_index("rule")["value"]
@@ -167,19 +157,18 @@ def load_problem(data_dir: str | Path, grouping: str = "interval") -> Problem:
 
     # pedidos de recolha
     max_w = min(v.capacity for v in vehicles)
-    by_key: dict[tuple, list[Item]] = {}
+    by_producer: dict[int, list[Item]] = {}
     for it in items.values():
-        key = (it.producer_id,) if grouping == "interval" else (it.producer_id, it.order_id)
-        by_key.setdefault(key, []).append(it)
+        by_producer.setdefault(it.producer_id, []).append(it)
     requests: dict[str, Request] = {}
     item_pickup: dict[int, str] = {}
     n = 0
-    for key in sorted(by_key):
-        for g in _group_pickups(by_key[key], max_w):
+    for producer in sorted(by_producer):
+        for g in _group_pickups(by_producer[producer], max_w):
             n += 1
             rid = f"P{n}"
             tw = (max(i.avail[0] for i in g), min(i.avail[1] for i in g))
-            requests[rid] = Request(rid, PICKUP, loc_of["producer", key[0]], tw,
+            requests[rid] = Request(rid, PICKUP, loc_of["producer", producer], tw,
                                     round(sum(i.weight for i in g), 3), tuple(sorted(i.item_id for i in g)))
             for i in g:
                 item_pickup[i.item_id] = rid
@@ -672,7 +661,7 @@ def plot_locations(p: Problem, ax=None, labels: bool = True):
     return ax
 
 
-def plot_routes(p: Problem, sol: Solution, title: str = "", day: int | None = None):
+def plot_routes(p: Problem, sol: Solution, title: str = ""):
     """Um painel por veículo; viagens de recolha a tracejado, de entrega a cheio."""
     xy = p.locations.set_index("location_id")[["longitude", "latitude"]]
     ev = evaluate(p, sol)
@@ -682,8 +671,6 @@ def plot_routes(p: Problem, sol: Solution, title: str = "", day: int | None = No
         plot_locations(p, ax, labels=False)
         trips = sorted((t for t in ev.trips if t.vid == vid), key=lambda t: t.depart)
         for k, ts in enumerate(trips):
-            if day is not None and int(ts.depart // (24 * 60)) != day:
-                continue
             path = [p.depot] + [p.requests[r].loc for r, _, _ in ts.stops] + [p.depot]
             pts = xy.loc[path]
             ax.plot(pts.longitude, pts.latitude, "--" if ts.kind == PICKUP else "-", lw=1.8,
@@ -727,10 +714,10 @@ def plot_gantt(p: Problem, ev: Evaluation, title: str = "", hours: tuple[int, in
     return fig
 
 
-def plot_histories(histories: dict[str, dict], title: str, key: str = "current", ax=None, cap: float | None = None):
+def plot_histories(histories: dict[str, dict], title: str, ax=None, cap: float | None = None):
     ax = ax or plt.subplots(figsize=(8, 4))[1]
     for name, h in histories.items():
-        ys = pd.Series(h[key])
+        ys = pd.Series(h["current"])
         if cap is not None:
             ys = ys.clip(upper=cap)
         ax.plot(ys.index, ys.values, label=name, lw=1.2)

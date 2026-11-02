@@ -376,11 +376,11 @@ def _prim(p: Problem, roots: set[int], nodes: set[int]) -> float:
 
 
 def h_zero(p: Problem, s: State) -> float:
+    """Sem heurística: o A* passa a pesquisa de custo uniforme (usada nos testes)."""
     return 0.0
 
 
-HEURISTICS = {"h1_max_detour": h_max_detour, "h2_min_arcs": h_min_arcs, "h3_mst": h_mst, "h4_relaxed": h_relaxed,
-              "h0_zero": h_zero}
+HEURISTICS = {"h1_max_detour": h_max_detour, "h2_min_arcs": h_min_arcs, "h3_mst": h_mst, "h4_relaxed": h_relaxed}
 
 
 # --------------------------------------------------------------------------- pesquisa
@@ -654,7 +654,3 @@ def trip_successors(p: Problem, s: State):
 def astar_trips(p: Problem, h: Heuristic = None, **kw) -> SearchResult:
     """A* em que cada ação é uma viagem inteira (mesmo estado, custo, objetivo e heurísticas)."""
     return best_first(p, h or h_relaxed, 1.0, 1.0, "A*-viagens", succ=trip_successors, **kw)
-
-
-def greedy_trips(p: Problem, h: Heuristic = None, **kw) -> SearchResult:
-    return best_first(p, h or h_relaxed, 0.0, 1.0, "Greedy-viagens", succ=trip_successors, **kw)

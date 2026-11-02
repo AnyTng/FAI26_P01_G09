@@ -130,7 +130,7 @@ class OnTiny(unittest.TestCase):
     def test_csp_modes_find_valid_assignments(self):
         for inference in ("none", "fc", "mac"):
             r = solve(self.p, inference=inference)
-            self.assertTrue(r.feasible, r.summary())
+            self.assertIsNotNone(r.solution, r.summary())
             self.assertTrue(check_solution(self.p, evaluate(self.p, r.solution)).valid)
 
     def test_csp_orders_trips_from_the_real_departure(self):
