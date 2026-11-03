@@ -376,7 +376,7 @@ def _prim(p: Problem, roots: set[int], nodes: set[int]) -> float:
 
 
 def h_zero(p: Problem, s: State) -> float:
-    """Sem heurística: o A* passa a pesquisa de custo uniforme (usada nos testes)."""
+    """Sem heurística: o A* passa a pesquisa de custo uniforme."""
     return 0.0
 
 
