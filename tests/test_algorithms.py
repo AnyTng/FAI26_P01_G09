@@ -59,10 +59,10 @@ class PerProblemCaches(unittest.TestCase):
     def test_heuristics_do_not_leak_between_problems(self):
         """As estruturas derivadas ficam em cache no próprio Problem, por isso uma instância nova
         (mesmo que reutilize o endereço de memória de uma já libertada) nunca vê dados de outra."""
-        expected = {ds: h_mst(load_problem(ROOT / "data" / ds), State.initial(load_problem(ROOT / "data" / ds)))
+        expected = {ds: h_mst(load_problem(ROOT / f"data_{ds}"), State.initial(load_problem(ROOT / f"data_{ds}")))
                     for ds in ("tiny", "small")}
         for ds in ("small", "tiny") * 3:
-            p = load_problem(ROOT / "data" / ds)
+            p = load_problem(ROOT / f"data_{ds}")
             self.assertAlmostEqual(h_mst(p, State.initial(p)), expected[ds], msg=ds)
             del p
 
@@ -76,7 +76,7 @@ class TripLevelSearch(Fixture):
 class TripLevelOnTiny(unittest.TestCase):
     def test_trip_timing_matches_simulator(self):
         """Cada filho da pesquisa por viagens tem de coincidir exatamente com simulate_trip."""
-        p = load_problem(ROOT / "data" / "tiny")
+        p = load_problem(ROOT / "data_tiny")
         frontier, seen = [State.initial(p)], 0
         while frontier and seen < 300:
             s = frontier.pop()
@@ -91,7 +91,7 @@ class TripLevelOnTiny(unittest.TestCase):
                 frontier.append(c)
 
     def test_trip_astar_finds_tiny_optimum(self):
-        p = load_problem(ROOT / "data" / "tiny")
+        p = load_problem(ROOT / "data_tiny")
         r = astar_trips(p)
         self.assertTrue(r.complete)
         self.assertAlmostEqual(r.cost, 533.09, places=2)
@@ -101,7 +101,7 @@ class TripLevelOnTiny(unittest.TestCase):
 class OnTiny(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.p = load_problem(ROOT / "data" / "tiny")
+        cls.p = load_problem(ROOT / "data_tiny")
         cls.g = greedy(cls.p)
 
     def test_greedy_is_valid(self):

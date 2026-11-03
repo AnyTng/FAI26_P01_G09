@@ -16,7 +16,7 @@ O documento principal é [`notebooks/01_Project01_G09.ipynb`](notebooks/01_Proje
 
 | Caminho | Conteúdo |
 |---|---|
-| `data/tiny`, `data/small` | CSV originais dos datasets, sem alterações |
+| `data_tiny/`, `data_small/` | CSV originais dos datasets, sem alterações |
 | `src/model.py` | entidades, carregamento, simulador, custo, viabilidade, auditoria dos dados, verificador linha a linha e figuras |
 | `src/informed.py` | Greedy, A\*, A\* ponderado, A\* por viagens e heurísticas h1–h4 |
 | `src/local_search.py` | Hill Climbing e Simulated Annealing |

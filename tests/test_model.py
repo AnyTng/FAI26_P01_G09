@@ -123,12 +123,12 @@ class ModelTests(Fixture):
 class DatasetTests(unittest.TestCase):
     def test_audit_has_no_errors(self):
         for ds in ("tiny", "small"):
-            a = audit(read_tables(ROOT / "data" / ds))
+            a = audit(read_tables(ROOT / f"data_{ds}"))
             self.assertFalse((a.status == "error").any(), a[a.status == "error"])
 
     def test_every_line_belongs_to_one_pickup_and_one_delivery(self):
         for ds in ("tiny", "small"):
-            p = load_problem(ROOT / "data" / ds)
+            p = load_problem(ROOT / f"data_{ds}")
             for kind in ("P", "D"):
                 lines = [i for q in p.requests.values() if q.kind == kind for i in q.items]
                 self.assertEqual(sorted(lines), sorted(p.items))

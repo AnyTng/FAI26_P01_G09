@@ -186,7 +186,7 @@ def load_problem(data_dir: str | Path) -> Problem:
     dist = {(int(r.origin_location_id), int(r.destination_location_id)): float(r.distance_km) for r in dm.itertuples()}
     time = {(int(r.origin_location_id), int(r.destination_location_id)): float(r.duration_min) for r in dm.itertuples()}
 
-    return Problem(name=data_dir.name, depot=depot, vehicles=vehicles, requests=requests, items=items,
+    return Problem(name=data_dir.name.removeprefix("data_"), depot=depot, vehicles=vehicles, requests=requests, items=items,
                    dist=dist, time=time, service=float(rules["stop_service_min"]),
                    handling=float(rules["warehouse_handling_min"]),
                    max_dwell=float(rules["max_warehouse_dwell_h"]) * 60, start_date=start,
