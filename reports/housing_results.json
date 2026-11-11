@@ -1,0 +1,149 @@
+{
+  "source": {
+    "dataset": "dansbecker/melbourne-housing-snapshot",
+    "ficheiro": "melb_data.csv",
+    "sha256": "3e449c3e95088da8a3a6b10331a5703f2c951d0740f317f97ed9baf0db1fd9f8",
+    "linhas_originais": 13580,
+    "duplicados_exatos_removidos": 0,
+    "preços_inválidos_removidos": 0,
+    "linhas_utilizadas": 13580
+  },
+  "seed": 42,
+  "features": [
+    "Rooms",
+    "Distance",
+    "Bathroom",
+    "Car",
+    "Landsize",
+    "BuildingArea",
+    "YearBuilt",
+    "Lattitude",
+    "Longtitude",
+    "Type=h",
+    "Type=t",
+    "Type=u"
+  ],
+  "split_rows": {
+    "train": 8149,
+    "validation": 2716,
+    "test": 2715
+  },
+  "price_centers": [
+    701455.9027367565,
+    1465987.9781761472,
+    2858575.1746031726
+  ],
+  "price_boundaries": [
+    1083721.9404564518,
+    2162281.57638966
+  ],
+  "price_classes": [
+    "barato",
+    "normal",
+    "caro"
+  ],
+  "best_config": {
+    "max_depth": 7,
+    "min_samples_split": 20,
+    "min_samples_leaf": 10
+  },
+  "validation_macro_f1": 0.641600425394795,
+  "baseline": {
+    "accuracy": 0.6158379373848987,
+    "macro_precision": 0.2052793124616329,
+    "macro_recall": 0.3333333333333333,
+    "macro_f1": 0.2540840361674645,
+    "confusion_matrix": [
+      [
+        1672,
+        0,
+        0
+      ],
+      [
+        874,
+        0,
+        0
+      ],
+      [
+        169,
+        0,
+        0
+      ]
+    ],
+    "per_class": [
+      {
+        "class": 0,
+        "precision": 0.6158379373848987,
+        "recall": 1.0,
+        "f1": 0.7622521085023934,
+        "support": 1672
+      },
+      {
+        "class": 1,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 874
+      },
+      {
+        "class": 2,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 169
+      }
+    ]
+  },
+  "tree": {
+    "accuracy": 0.8040515653775322,
+    "macro_precision": 0.7775455619201489,
+    "macro_recall": 0.6387378756899967,
+    "macro_f1": 0.6542232672898016,
+    "confusion_matrix": [
+      [
+        1397,
+        275,
+        0
+      ],
+      [
+        114,
+        748,
+        12
+      ],
+      [
+        2,
+        129,
+        38
+      ]
+    ],
+    "per_class": [
+      {
+        "class": 0,
+        "precision": 0.923331130204891,
+        "recall": 0.8355263157894737,
+        "f1": 0.8772370486656201,
+        "support": 1672
+      },
+      {
+        "class": 1,
+        "precision": 0.6493055555555556,
+        "recall": 0.8558352402745996,
+        "f1": 0.7384007897334651,
+        "support": 874
+      },
+      {
+        "class": 2,
+        "precision": 0.76,
+        "recall": 0.22485207100591717,
+        "f1": 0.3470319634703196,
+        "support": 169
+      }
+    ]
+  },
+  "versions": {
+    "python": "3.11.6",
+    "pandas": "3.0.1",
+    "numpy": "1.26.4",
+    "scikit-learn": "1.8.0"
+  }
+}

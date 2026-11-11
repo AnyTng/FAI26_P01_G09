@@ -2,49 +2,74 @@
 
 Projeto 01 de Fundamentos de Inteligência Artificial do grupo G09, de Gonçalo Tierri (23020) e Ricardo Oliveira (20432).
 
-## Home Credit — trabalho do Projeto 02
+## Habitação — classes de preço e árvore de decisão
 
-Os notebooks de planeamento de rotas do Projeto 01 mantêm-se em `notebooks/`.
-Os notebooks de Home Credit descritos abaixo estão na raiz deste repositório.
+Este trabalho usa o [Melbourne Housing Snapshot](https://www.kaggle.com/datasets/dansbecker/melbourne-housing-snapshot).
+O preço observado de venda (`Price`) é agrupado em **barato**, **normal** e **caro** com
+`sklearn.cluster.KMeans(n_clusters=3)`. As classes são acrescentadas à tabela e previstas
+por uma árvore de classificação **implementada de raiz**.
 
-Projeto 02 de Fundamentos de Inteligência Artificial, Grupo 09, MIAA, UPCA.
+«Barato» significa pertencer ao grupo de preços mais baixos desta base; não significa
+estar subavaliado para a zona. Os dados são de Melbourne, não de Portugal.
 
-| Nome | Número |
-| --- | --- |
-| Gonçalo Tierri | 23020 |
-| Ricardo Oliveira | 20432 |
+### Ficheiros
 
-Contribuições individuais: preencher após a divisão e realização efetiva das tarefas.
+- `01_eda.ipynb`: qualidade, distribuições e fundamentação da variável-alvo.
+- `02_classify.ipynb`: criação das classes, tabela classificada, ajuste e avaliação da árvore.
+- `03_clusters.ipynb`: análise separada de perfis com K-Means de raiz, sem usar o preço.
+- `libs/data.py`: carregamento, classes de preço, separação por imóvel e preparação.
+- `libs/decisiontrees.py`: árvore multiclasse por Gini.
+- `libs/kmeans.py` e `libs/metrics.py`: K-Means e métricas de raiz.
+- `reports/housing_*`: resultados reais, classes atribuídas e configurações avaliadas.
+- `notebooks/`, `src/`, `data_tiny/` e `data_small/`: planeamento de rotas do Projeto 01.
 
-### Estado e objetivos
+### Método e proteção da avaliação
 
-Implementação inicial para duas perguntas:
-- Classificação: prever dificuldades de pagamento segundo a definição de `TARGET`.
-- Clustering: descobrir perfis financeiros de pedidos sem usar `TARGET`.
+1. Separar aproximadamente 60/20/20 por `Suburb + Address`: vendas da mesma morada
+   ficam no mesmo conjunto. Foram encontrados 114 registos adicionais de moradas repetidas.
+2. Aprender três grupos usando **apenas Price do treino**. Ordenar os centroides para
+   atribuir os nomes; IDs arbitrários de clusters não têm significado económico.
+3. Aplicar essa definição à validação e ao teste, criando `PriceClass` e `ClassePreco`.
+4. Aprender medianas e categorias apenas no treino. Excluir `Price`, classes,
+   morada, identificadores, vendedor, data e método de venda das entradas da árvore.
+5. Escolher entre 12 configurações de `max_depth`, `min_samples_split` e
+   `min_samples_leaf` pela F1 macro da validação. Não escolher ajustes pelo teste.
+6. Avaliar o modelo escolhido no teste e comparar com a classe maioritária do treino.
 
-Ainda não há resultados reais calculados ou conclusões validadas.
-O dataset não é especificamente português e não garante que os empréstimos sejam para habitação.
+Por orientação recebida, scikit-learn é usado para criar a variável-alvo.
+A árvore e o K-Means exploratório do notebook 03 são de raiz.
+Contribuições individuais: preencher com o trabalho efetivamente realizado.
 
-### Requisitos e decisões
+### Primeira execução real
 
-O guião pede EDA, árvore de decisão de raiz com pelo menos três hiperparâmetros,
-K-Means de raiz, avaliação, interpretação e defesa do trabalho.
+Foram utilizadas as 13 580 linhas do CSV; não havia cópias exatas nem preços inválidos.
+Separação: 8 149 treino, 2 716 validação e 2 715 teste.
 
-As implementações estão em `libs/decisiontrees.py` e `libs/kmeans.py`.
-Usamos NumPy/pandas para operações e preparação e Matplotlib para gráficos;
-não usamos modelos nem métricas prontas de bibliotecas de ML.
+| Classe | Centro do grupo no treino | Fronteiras aproximadas no preço original | Casas na base completa |
+| --- | ---: | --- | ---: |
+| barato | 701 455,90 | até 1 083 721,94 | 8 438 |
+| normal | 1 465 987,98 | de 1 083 721,94 a 2 162 281,58 | 4 322 |
+| caro | 2 858 575,17 | acima de 2 162 281,58 | 820 |
 
-A seleção de sete variáveis numéricas, a amostra máxima inicial de 20 000 pedidos,
-a grelha de hiperparâmetros e os K de 2 a 8 são propostas de desenvolvimento.
-Serão revistos após a EDA e medição dos tempos, sem usar o desempenho no teste para escolher ajustes.
+Os valores estão nas unidades monetárias originais; não foram convertidos para euros.
+As fronteiras são os pontos médios dos centroides; em empate exato, a atribuição segue o modelo.
 
-Confirmar com o docente:
-1. Limites do uso de bibliotecas auxiliares. pandas foi autorizado provisoriamente pelo grupo; confirmar a regra final com o docente.
-2. Adequação temática deste dataset de crédito.
-3. Obrigatoriedade de regras de associação, mencionadas apenas na introdução.
-4. Se os três notebooks devem ser reunidos num único notebook na entrega.
+Configuração escolhida: profundidade 7, mínimo de 20 exemplos para dividir e 10 por folha.
 
-### Executar
+| Modelo | Accuracy no teste | F1 macro no teste |
+| --- | ---: | ---: |
+| Classe maioritária | 61,58% | 0,2541 |
+| Árvore de raiz | 80,41% | 0,6542 |
+
+**Limitação importante:** apenas 38 de 169 casas caras foram identificadas como caras
+(recall de 22,49%); 129 foram classificadas como normais. A accuracy global não resolve
+esta dificuldade. Não se ajustou uma nova configuração a partir destes erros do teste.
+
+No clustering exploratório, K=3 teve a maior silhouette entre K=2 e K=6:
+0,3254 numa amostra fixa de 500 pontos. Os grupos quase reproduzem o tipo do imóvel,
+mostrando forte influência da codificação de `Type`; não são as três classes de preço.
+
+### Executar e obter a tabela
 
 Python 3.11 ou superior, num ambiente virtual:
 
@@ -53,64 +78,32 @@ python -m pip install -r requirements.txt
 python -m jupyterlab
 ```
 
-Abrir os notebooks a partir da raiz do repositório:
-1. `01_eda.ipynb`: dicionário, qualidade, distribuição das classes e variáveis.
-2. `02_classify.ipynb`: separação estratificada 60/20/20, preparação aprendida no treino,
-   pesquisa dos três hiperparâmetros e limiar na validação, comparação final com baseline no teste.
-3. `03_clusters.ipynb`: preparação própria, comparação de K, silhouette amostral,
-   diagnóstico entre sementes e descrição dos perfis.
+Abrir os notebooks na raiz do repositório. O CSV público é descarregado apenas se
+`data/melbourne/melb_data.csv` não existir; também se pode definir `MELBOURNE_DATA`
+com a pasta de origem.
 
-Os três notebooks podem ser executados de forma independente.
-Não instalam dependências automaticamente nem descarregam dados por defeito.
+O notebook 02 grava a tabela completa com as novas colunas em
+`data/melbourne/melb_classificado.csv`. Os CSV completos ficam fora do Git.
+A versão resumida publicada é `reports/housing_price_classes.csv`, identificada por
+`SourceRow`, o índice da linha no CSV original (começando em zero).
 
-### Dados
+`reports/housing_results.json` regista o hash da fonte, versões do ambiente,
+fronteiras, variáveis, parâmetros e métricas. Os notebooks incluem outputs reais.
 
-Fonte original: [Home Credit Default Risk — Kaggle](https://www.kaggle.com/competitions/home-credit-default-risk/data).
-
-São necessários apenas:
-- `application_train.csv`
-- `HomeCredit_columns_description.csv`
-
-Colocar ambos em `data/home_credit/`, ou definir a variável de ambiente `HOME_CREDIT_DATA`
-com a pasta que os contém. Os CSV permanecem fora do Git.
-
-Também é possível usar `DOWNLOAD = True` na primeira célula de código.
-O carregador usa [kagglehub.competition_download](https://github.com/Kaggle/kagglehub#download-competition)
-para obter apenas os dois ficheiros.
-A conta Kaggle deve estar autenticada e o utilizador deve aceitar previamente as regras
-da competição. Credenciais nunca devem ser guardadas no código ou no repositório.
-
-Se o download devolver HTTP 401/403, é necessário autenticar a conta Kaggle e rever
-as regras da competição no próprio site. O código não aceita regras nem contorna recusas de acesso.
-Em alternativa, descarregar manualmente os dois CSV e indicar a pasta que os contém.
-
-O carregador calcula o tamanho e o SHA-256 dos dois ficheiros. Os notebooks mostram
-estes identificadores e as versões de Python, pandas e NumPy para documentar a experiência.
-
-`application_test.csv` não tem os rótulos públicos necessários à avaliação local.
-A nossa separação de teste é criada a partir de `application_train.csv`.
-
-Não há fallback para dados artificiais quando os dados reais estão ausentes.
-Verificar as condições da competição antes de redistribuir os CSV no ZIP da entrega.
-
-### Validação e limitações
+### Validação e questões em aberto
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-Os testes usam casos pequenos artificiais com resultados conhecidos, exclusivamente para
-validar o código. Não são experiências de Home Credit nem evidência de qualidade preditiva.
+Os testes verificam as três classes, a ausência de fuga de informação na sua criação,
+a separação de moradas, a preparação, as métricas e os algoritmos.
+Os três notebooks foram executados integralmente com o CSV original.
 
-A árvore usa divisões binárias por Gini e os hiperparâmetros `max_depth`,
-`min_samples_split` e `min_samples_leaf`. Variáveis categóricas ficam fora desta primeira versão.
-Precisão e F1 são zero quando não há previsões positivas.
+Rever os valores atípicos e a sua interpretação: existem áreas zero, grandes extremos
+e `YearBuilt=1196`. Não se corrigiram valores por suposição nem se apagaram extremos
+automaticamente. Área zero pode ter significados diferentes conforme o tipo de imóvel.
 
-O K-Means usa Lloyd, inicialização k-means++, várias execuções e tratamento de grupos vazios.
-A silhouette usa uma subamostra fixa de até 500 pontos para limitar o custo quadrático.
-A maior silhouette propõe um K, mas não substitui interpretação e análise de estabilidade.
-`TARGET` e identificadores não entram nas distâncias.
-
-Antes da entrega: executar com os CSV reais, interpretar resultados, registar versões das
-dependências, preencher contribuições, rever o guião e verificar o ZIP.
-
+Antes da entrega: rever com o docente o alcance do uso de bibliotecas e das regras de
+associação, preencher contribuições e preparar ZIP/apresentação.
+O guião indica um repositório privado com nomenclatura `FAI26_P02_G##`.

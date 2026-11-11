@@ -183,7 +183,7 @@ cython_debug/
 
 *.zip
 
-# CSV originais Home Credit e credenciais Kaggle não entram no Git.
-/data/home_credit/
+# CSV completos da habitação e credenciais Kaggle não entram no Git.
+/data/melbourne/
 kaggle.json
 .DS_Store

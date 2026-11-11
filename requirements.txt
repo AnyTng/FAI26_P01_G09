@@ -4,3 +4,4 @@ jupyterlab>=4.0
 ipykernel>=6.0
 numpy
 kagglehub
+scikit-learn>=1.4
