@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -132,6 +133,28 @@ class DataTests(unittest.TestCase):
             loaded, dictionary = load_applications(folder)
             self.assertEqual(len(loaded), 2)
             self.assertEqual(dictionary.iloc[0]["Row"], "TARGET")
+            recorded = loaded.attrs["source_files"]
+            self.assertEqual(len(recorded), 2)
+            self.assertEqual(recorded[0]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+            self.assertEqual(recorded[0]["bytes"], path.stat().st_size)
+
+    def test_access_denial_is_explained_and_other_errors_propagate(self):
+        class DownloadError(Exception):
+            def __init__(self, status):
+                self.response = SimpleNamespace(status_code=status)
+
+        with TemporaryDirectory() as folder:
+            for status in (401, 403, 500):
+                def fail_download(*args, **kwargs):
+                    raise DownloadError(status)
+
+                with patch.dict("sys.modules", {"kagglehub": SimpleNamespace(competition_download=fail_download)}):
+                    if status in (401, 403):
+                        with self.assertRaisesRegex(PermissionError, str(status)):
+                            load_applications(folder, download=True)
+                    else:
+                        with self.assertRaises(DownloadError):
+                            load_applications(folder, download=True)
 
     def test_partial_download_and_cp1252_dictionary(self):
         with TemporaryDirectory() as folder:

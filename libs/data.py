@@ -1,6 +1,7 @@
 """Leitura e preparação dos dados; os CSV originais permanecem intactos."""
 
 import os
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -27,9 +28,22 @@ def load_applications(data_dir=None, download=False):
         folder.mkdir(parents=True, exist_ok=True)
         for name in (TRAIN_FILE, DICTIONARY_FILE):
             if not (folder / name).is_file():
-                kagglehub.competition_download(
-                    COMPETITION, path=name, output_dir=str(folder)
-                )
+                try:
+                    kagglehub.competition_download(
+                        COMPETITION, path=name, output_dir=str(folder)
+                    )
+                except Exception as error:
+                    # Traduz apenas a recusa de acesso; erros de rede/código mantêm a causa original.
+                    status = getattr(getattr(error, "response", None), "status_code", None)
+                    if status not in (401, 403):
+                        raise
+                    raise PermissionError(
+                        f"Kaggle recusou o acesso (HTTP {status}). Autentica a tua conta e "
+                        "aceita pessoalmente as regras da competição em "
+                        f"https://www.kaggle.com/competitions/{COMPETITION}/rules . "
+                        "Em alternativa, coloca os dois CSV descarregados manualmente na pasta dos dados. "
+                        "Não coloques tokens no código."
+                    ) from error
     path = folder / TRAIN_FILE
     missing_files = [name for name in (TRAIN_FILE, DICTIONARY_FILE) if not (folder / name).is_file()]
     if missing_files:
@@ -54,6 +68,18 @@ def load_applications(data_dir=None, download=False):
         # Ficheiros CSV exportados em Windows podem usar acentos/citações em CP1252.
         # Só muda a codificação após falha explícita; nunca descarta caracteres.
         dictionary = pd.read_csv(dictionary_path, encoding="cp1252")
+    # O hash identifica a versão exata dos ficheiros sem publicar os CSV originais.
+    # A leitura por blocos do file_digest evita carregar outra cópia do CSV em memória.
+    source_files = []
+    for source_path in (path, dictionary_path):
+        with source_path.open("rb") as handle:
+            digest = hashlib.file_digest(handle, "sha256").hexdigest()
+        source_files.append({
+            "ficheiro": source_path.name,
+            "bytes": source_path.stat().st_size,
+            "sha256": digest,
+        })
+    frame.attrs["source_files"] = source_files
     return frame, dictionary
 
 

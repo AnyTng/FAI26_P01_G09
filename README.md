@@ -39,7 +39,7 @@ a grelha de hiperparâmetros e os K de 2 a 8 são propostas de desenvolvimento.
 Serão revistos após a EDA e medição dos tempos, sem usar o desempenho no teste para escolher ajustes.
 
 Confirmar com o docente:
-1. Autorização para NumPy, pandas e Matplotlib como auxiliares.
+1. Limites do uso de bibliotecas auxiliares. pandas foi autorizado provisoriamente pelo grupo; confirmar a regra final com o docente.
 2. Adequação temática deste dataset de crédito.
 3. Obrigatoriedade de regras de associação, mencionadas apenas na introdução.
 4. Se os três notebooks devem ser reunidos num único notebook na entrega.
@@ -79,6 +79,13 @@ O carregador usa [kagglehub.competition_download](https://github.com/Kaggle/kagg
 para obter apenas os dois ficheiros.
 A conta Kaggle deve estar autenticada e o utilizador deve aceitar previamente as regras
 da competição. Credenciais nunca devem ser guardadas no código ou no repositório.
+
+Se o download devolver HTTP 401/403, é necessário autenticar a conta Kaggle e rever
+as regras da competição no próprio site. O código não aceita regras nem contorna recusas de acesso.
+Em alternativa, descarregar manualmente os dois CSV e indicar a pasta que os contém.
+
+O carregador calcula o tamanho e o SHA-256 dos dois ficheiros. Os notebooks mostram
+estes identificadores e as versões de Python, pandas e NumPy para documentar a experiência.
 
 `application_test.csv` não tem os rótulos públicos necessários à avaliação local.
 A nossa separação de teste é criada a partir de `application_train.csv`.
