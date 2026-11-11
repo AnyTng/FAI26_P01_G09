@@ -182,3 +182,8 @@ cython_debug/
 .idea/
 
 *.zip
+
+# CSV originais Home Credit e credenciais Kaggle não entram no Git.
+/data/home_credit/
+kaggle.json
+.DS_Store
